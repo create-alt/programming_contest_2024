@@ -433,7 +433,7 @@ class Trainer:
         # 図を表示
         plt.show()
 
-        with open("./test_initial.json", 'w') as f:
+        with open(f"./test_initial_{self.env_test.max_rew}_{self.env_test.best_step}.json", 'w') as f:
             json.dump(output, f, indent=2)
 
     def plot_return(self):

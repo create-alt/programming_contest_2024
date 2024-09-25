@@ -2,6 +2,10 @@
 
 高専プロコン2024競技部門用のコードです。
 
+実行前にrequirements.txtを使用して仮想環境内にpythonライブラリをインストールしてください。
+
+pytorchに関してはCUDAのバージョンでインストール方法が異なるので　https://pytorch.org/get-started/locally/　を参照してください。
+
 run.pyを実行することで模擬環境で学習と評価を行うことができます。
 
 現在はまだできていませんがEnvironment.cppをmodel.py内で読み込み、環境(transition class)をcppで動かすことで実行時間の短縮を図ります。

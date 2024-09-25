@@ -1,4 +1,4 @@
-#include <pybind11/pybind11.h>
+#include <../.venv/lib/site-packages/pybind11/include>
 #include <pybind11/stl.h>
 #include "Transition.h"
 

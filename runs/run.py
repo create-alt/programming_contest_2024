@@ -7,7 +7,6 @@ import json
 
 from model import transition, SAC, Trainer 
 
-
 """
 boardやcutterの作成
 本来はjsonファイルの入力を受け取るが、プログラムのテスト用に直接作成
