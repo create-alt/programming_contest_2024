@@ -4,7 +4,7 @@
 
 実行前にrequirements.txtを使用して仮想環境内にpythonライブラリをインストールしてください。
 
-pytorchに関してはCUDAのバージョンでインストール方法が異なるので　https://pytorch.org/get-started/locally/　を参照してください。
+pytorchに関してはCUDAのバージョンでインストール方法が異なるので　[pytoch公式サイト](https://pytorch.org/get-started/locally/)　を参照してください。
 
 run.pyを実行することで模擬環境で学習と評価を行うことができます。
 
