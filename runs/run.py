@@ -7,41 +7,53 @@ import json
 
 from model import transition, SAC, Trainer 
 
+
+
+"""## 環境のインスタンス化・学習・検証
+
+### boardの作成と可視化
+"""
+
 """
 boardやcutterの作成
 本来はjsonファイルの入力を受け取るが、プログラムのテスト用に直接作成
 """
 board_train = []
 
-for i in range(32):
+board_size = 32
+
+SEED = 0
+random.seed(SEED)
+
+for i in range(board_size):
   board_train.append([])
-  for j in range(32):
+  for j in range(board_size):
       board_train[i].append(random.randint(0,3))
 
-goal_train = []
+# goal_train = []
 
-for i in range(32):
-  goal_train.append([])
+# for i in range(32):
+#   goal_train.append([])
+#   for j in range(32):
+#       goal_train[i].append(random.randint(0,3))
 
-  val = 0
-  if(i < 8):
-    val = 0
-  elif(i < 16):
-    val = 1
-  elif(i < 24):
-    val = 2
-  else:
-    val = 3
-
-  for j in range(32):
-      goal_train[i].append(val)
+goal_train = copy.deepcopy(board_train)
+random.shuffle(goal_train)
 
 board_test = copy.deepcopy(board_train)
 goal_test = copy.deepcopy(goal_train)
 
-cutter = [[[1]]]
+count = 0
+for i in range(board_size):
+  for j in range(board_size):
+    if(board_test[i][j] == goal_test[i][j]):
+      count+=1
 
-for size in [2, 4, 8, 16, 32, 64, 128, 256]:
+print(count)
+
+cutter = []
+
+for size in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
     grid = []
     for i in range(size):
         grid.append([])
@@ -71,6 +83,8 @@ for size in [2, 4, 8, 16, 32, 64, 128, 256]:
                 grid[i].append(0)
 
     cutter.append(grid)
+
+
 
 
 """
@@ -108,14 +122,16 @@ plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変�
 # 図を表示
 plt.show()
 
+"""### 学習の開始"""
 
 """
 環境とネットワークのインスタンス生成と訓練の開始
 """
 SEED = 0
 REWARD_SCALE = 0.99
-NUM_STEPS = 5 * 10 ** 5
-EVAL_INTERVAL = 50
+NUM_STEPS = 5 * 10 ** 4
+BATCH_SIZE = 128
+EVAL_INTERVAL = BATCH_SIZE * 10
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
 env = transition(board_train, cutter, goal_train)
@@ -130,8 +146,13 @@ algo = SAC(
     device=device,
     seed=SEED,
     reward_scale=REWARD_SCALE,
-    batch_size=10,
-    start_steps=2000
+    batch_size=BATCH_SIZE,
+    lr_actor=3e-3,
+    lr_critic=3e-3,
+    replay_size=10**4,
+    start_steps=256,
+    # pretrain = True,
+    # model_weight_name = 'model_best'
 )
 
 trainer = Trainer(
@@ -144,6 +165,21 @@ trainer = Trainer(
 )
 
 trainer.train()
+
+"""
+コーディングメモ
+
+ある程度までそろえられてもそれ以降決め手がないので、指針となるような爆発的な報酬が欲しいところ
+一方で、負の報酬についてもうまく導入して、余計な行動を阻害することも考える
+ー＞微小な変化に対応できず、argmaxをとったときに同じ行動を返す場合に負の報酬など
+    （実際の行動はrandom.choiceでよいが、報酬自体はそれで与える）
+
+ネットワークに入力を通して出力をもとにbackwardを行うとき、
+道中でtensorを定義しなおしたりnumpyに型変換したり、detachやno_gradなどを使用すると勾配が伝わらなくなり、学習ができなくなるので注意
+"""
+
+
+"""### 報酬と行動回数の変化の可視化"""
 
 #最大報酬の変化を可視化
 trainer.plot_return()

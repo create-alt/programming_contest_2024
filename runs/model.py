@@ -10,6 +10,7 @@ from matplotlib.colors import ListedColormap
 import gc
 from pprint import pprint
 import json
+import subprocess
 
 import torch
 import torchvision
@@ -18,6 +19,10 @@ from torch.distributions import Normal
 import torch.nn.functional as F
 from torchvision import models
 
+
+path = "../model_weights/"
+
+"""## 関数定義"""
 
 def mySqueeze(x):
   return np.array(x).squeeze().tolist()
@@ -46,8 +51,48 @@ def resize(board, batch_size, shape=[256,256]):
 
     end = time()
 
-    # print(f"risize time : {end-start}")
+    print(f"risize time : {end-start}")
     return init_tensor
+
+def calculate_log_pi(log_stds, noises, actions):
+    """ 確率論的な行動の確率密度を返す． """
+    # ガウス分布 `N(0, stds * I)` における `noises * stds` の確率密度の対数(= \log \pi(u|a))を計算する．
+    # (torch.distributions.Normalを使うと無駄な計算が生じるので，下記では直接計算しています．)
+    gaussian_log_probs = \
+        (-0.5 * noises.pow(2) - log_stds).sum(dim=-1, keepdim=True) - 0.5 * math.log(2 * math.pi) * log_stds.size(-1)
+
+    # tanh による確率密度の変化を修正する．
+    log_pis = gaussian_log_probs - torch.log(1 - actions.pow(2) + 1e-6).sum(dim=-1, keepdim=True)
+
+    return log_pis
+
+def reparameterize(means, log_stds):
+    """ Reparameterization Trickを用いて，確率論的な行動とその確率密度を返す． """
+    # 標準偏差．
+    stds = log_stds.exp()
+    # 標準ガウス分布から，ノイズをサンプリングする．
+    noises = torch.randn_like(means)
+    # Reparameterization Trickを用いて，N(means, stds)からのサンプルを計算する．
+    us = means + noises * stds
+    # tanh　を適用し，確率論的な行動を計算する．
+    actions = torch.tanh(us)
+
+    # 確率論的な行動の確率密度の対数を計算する．
+    log_pis = calculate_log_pi(log_stds, noises, actions)
+
+    return actions, log_pis
+
+def atanh(x):
+    """ tanh の逆関数． """
+    return 0.5 * (torch.log(1 + x + 1e-6) - torch.log(1 - x + 1e-6))
+
+
+def evaluate_lop_pi(means, log_stds, actions):
+    """ 平均(mean)，標準偏差の対数(log_stds)でパラメータ化した方策における，行動(actions)の確率密度の対数を計算する． """
+    noises = (atanh(actions) - means) / (log_stds.exp() + 1e-8)
+    return calculate_log_pi(log_stds, noises, actions)
+
+"""## 環境定義"""
 
 #2重ループが頻出しており、実行時間が長いと考えられるので要改善
 class transition():
@@ -79,7 +124,28 @@ class transition():
         self.before_rew = 0
 
         self.rew   = 0
-        self.h_countforrew, self.w_countforrew = 0, 0 # 左or上詰めで、行・列の一致に報酬を与えるのでそのindexを定義しておく
+
+        self.h_countforrew, self.w_countforrew= [], [] # 左or上詰めで、行・列の一致に報酬を与えるが、もともと一致していると過剰な報酬を与えることになるので、事前に一致している行・列を格納
+
+        for i in range(self.x_boardsize):
+          countH, countW = 0, 0
+          for j in range(self.y_boardsize):
+            if board[i][j] == goal[i][j]:
+              countW += 1
+
+            if board[j][i] == goal[j][i]:
+              countH += 1
+
+          if countW == self.y_boardsize:
+            self.w_countforrew.append(True)
+          else:
+            self.w_countforrew.append(False)
+
+          if countH == self.x_boardsize:
+            self.h_countforrew.append(True)
+          else:
+            self.h_countforrew.append(False)
+
 
         self.num_of_cutter = len(self.cutter)
         self.state_shape  = [len(board), len(board[0])]
@@ -94,6 +160,7 @@ class transition():
         self.ans_board = None
 
         self.test = test
+        self.before_act = None
 
     def step(self, act):
         """
@@ -108,7 +175,7 @@ class transition():
         self.board = copy.deepcopy(next_state)
 
         if self.num_step % self.frequ == 0:
-            self.rew += self.reward(state,next_state)
+            self.rew += self.reward(state,next_state, act)
             """
             max_rewの時までの行動とその時の状態を保存して出力するように書き換え
             """
@@ -125,140 +192,110 @@ class transition():
             # act[1] = (act[1] * self.y_boardsize) // 256
             self.ans["ops"].append({"p":act[2], "x":act[0], "y":act[1], "s":act[3]})
 
+        self.before_act = copy.deepcopy(act)
+
         #next_state : 次の状態, self.rew : 今回の行動への報酬, self.done : 行動が終了するかどうか
         return next_state, self.rew, self.done, self.num_step
 
-    def action(self, board ,pos, cutter, direction, batch_size=1):
-        """
-        本メソッドでは、選択した行動の結果から次の状態を計算する
+    def action(self, board, pos, cutter, direction, batch_size=1):
+      """
+      本メソッドでは、選択した行動の結果から次の状態を計算する
+      """
+      start = time()
 
-        cutter(2次元list) => 抜き型の状態(0,1の二値 1の箇所を抜く)
-        pos   (1次元list) => 型抜きを行う座標[x,y]
-        direction (int)  => 型抜き後移動する方向(0:上 1:下 2:左 3:右)
-        """
-        start = time()
-        #cutterのサイズと型抜き座標を定数として格納
-        # X_SIZE, Y_SIZE = cutter.size(), cutter[0].size()
-        X_SIZE, Y_SIZE = len(cutter), len(cutter[0])
-        X, Y = pos[0], pos[1]
-        self.x_boardsize, self.y_boardsize = len(self.board), len(self.board[0])
+      # cutterのサイズと型抜き座標を定数として格納
+      X_SIZE, Y_SIZE = len(cutter), len(cutter[0])
+      X, Y = pos[0], pos[1]
+      x_boardsize, y_boardsize = len(board), len(board[0])
 
-        # X = (X * self.x_boardsize) // 256
-        # Y = (Y * self.y_boardsize) // 256
+      # 移動方向をベクトルで定義
+      direction_vectors = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
+      dx, dy = direction_vectors[direction]
 
-        #どの方向に動かすかをbool値で格納
-        up, down, left, right = direction==0, direction==1, direction==2, direction==3
+      # cut_valを動的に確保 (メモリの無駄を避けるため、必要サイズだけ確保)
+      cut_val = []
 
-        #cut_val には抜いたピースを一時的に格納(早く抜いたピースほどindexが小さい)
-        #包括表記を使用しなければ全行(cut_val[0] ~ cut_val[255])が全て同じ値となってしまうので注意
-        cut_val = [[-1] * 256 for _ in range(256)]
-        x_count, y_count = 0,0
-        #抜くピースを格納し、穴あきとなる箇所の値を-1で埋める
-        for i in range(X_SIZE):
-            x_bool = False
-            for j in range(Y_SIZE):
-                #現在のマスがgirdの範囲内かどうか確認
-                if not(0<= X+i <self.x_boardsize and 0<= Y+j <self.y_boardsize): continue
+      # 抜きピースを保存し、穴を空ける
+      for i in range(X_SIZE):
+          for j in range(Y_SIZE):
+              if 0 <= X + i < x_boardsize and 0 <= Y + j < y_boardsize and cutter[i][j] == 1:
+                  cut_val.append(board[X + i][Y + j])
+                  board[X + i][Y + j] = -1
 
-                #抜き型のうち1のマスに当たる箇所を抜く　値は保存
-                if cutter[i][j] == 1:
-                    if up or down:
-                        cut_val[x_count][y_count] = board[X+i][Y+j]
-                    elif left or right:
-                        cut_val[x_count][y_count] = board[X+i][Y+j]
+      #direction (int)  => 型抜き後移動する方向(0:上 1:下 2:左 3:右)
 
-                    board[X+i][Y+j] = -1
+      # board全体の走査を省略するため、カッターの影響を受けた範囲のみ移動処理を実施
+      if direction in [0, 1]:  # 上下方向の移動
+          for j in range(Y, Y + Y_SIZE):
+              if 0 <= j < y_boardsize:
+                  count = 0
+                  if direction == 0:  # 上方向
+                      for i in range(X, x_boardsize):
+                          if board[i][j] == -1:
+                              count += 1
+                          elif count > 0:
+                              board[i - count][j] = board[i][j]
+                              board[i][j] = -1
+                  else:  # 下方向
+                      for i in range(min(X + X_SIZE - 1, x_boardsize - 1), -1, -1):
+                          if board[i][j] == -1:
+                              count += 1
+                          elif count > 0:
+                              board[i + count][j] = board[i][j]
+                              board[i][j] = -1
 
-                    y_count += 1
-                    x_bool = True
+      elif direction in [2, 3]:  # 左右方向の移動
+          for i in range(X, X + X_SIZE):
+              if 0 <= i < x_boardsize:
+                  count = 0
+                  if direction == 2:  # 左方向
+                      for j in range(Y, y_boardsize):
+                          if board[i][j] == -1:
+                              count += 1
+                          elif count > 0:
+                              board[i][j - count] = board[i][j]
+                              board[i][j] = -1
+                  else:  # 右方向
+                      for j in range(min(Y + Y_SIZE - 1, y_boardsize - 1), -1 , -1):
+                          if board[i][j] == -1:
+                              count += 1
+                          elif count > 0:
+                              board[i][j + count] = board[i][j]
+                              board[i][j] = -1
+
+      # 元の位置にcut_valを戻す (全探索を避け、ピースが置かれた場所にのみ戻す)
+      cut_index = 0
+      for i in range(X_SIZE):
+          for j in range(Y_SIZE):
+              if cut_index < len(cut_val):
+                  #direction (int)  => 型抜き後移動する方向(0:上 1:下 2:左 3:右)
+                  if direction == 0:
+                      if 0 <= x_boardsize - X_SIZE + i < x_boardsize and 0 <= Y + j < y_boardsize and board[x_boardsize - X_SIZE + i][Y + j] == -1:
+                          board[x_boardsize - X_SIZE + i][Y + j] = cut_val[cut_index]
+                          cut_index += 1
+
+                  elif direction == 1:
+                      if 0 <= i < x_boardsize and 0 <= Y + j < y_boardsize and board[i][Y + j] == -1:
+                          board[i][Y + j] = cut_val[cut_index]
+                          cut_index += 1
+
+                  elif direction == 2:
+                      if 0 <= X + i < x_boardsize and 0 <= y_boardsize - Y_SIZE + j < y_boardsize and board[X + i][y_boardsize - Y_SIZE + j] == -1:
+                          board[X + i][y_boardsize - Y_SIZE + j] = cut_val[cut_index]
+                          cut_index += 1
+
+                  elif direction == 3:
+                      if 0 <= X + i < x_boardsize and 0 <= j < y_boardsize and board[X + i][j] == -1:
+                          board[X + i][j] = cut_val[cut_index]
+                          cut_index += 1
+
+      end = time()
+      # print(f"action time : {end-start}")
+
+      return board
 
 
-            if x_bool:
-                x_count += 1
-
-            y_count = 0
-
-
-        #countには-1が続いた回数(必要移動回数)を格納するが、必要サイズが変動するので最大の256を取っておく
-        count = [0] * 256
-        for i in range(self.x_boardsize):
-            for j in range(self.y_boardsize):
-                #以下はそれぞれ、数値を確認していく方向が共通な上左と下右それぞれについての現在のマスがgridの範囲内か否かを判断するbool値
-
-                """
-                以下の条件分岐は次のような分類を行っている
-
-                どの方向に移動するか：
-                    現在のマスは範囲内か：範囲内でなければcontinue
-
-                    現在のマスは -1 か：-1 なら count+=1 で continue
-                    (-1以外なら)現在のマスの数字をcount分前のマスに挿入し、現在のマスは -1 に
-                """
-
-                if up:
-                    x_index, y_index = i, j
-
-                    if board[x_index][y_index] == -1:
-                        count[y_index] += 1
-
-                    elif count[y_index] != 0:
-                        board[x_index - count[y_index]][y_index] = board[x_index][y_index]
-                        board[x_index][y_index] = -1
-
-                elif left:
-                    x_index, y_index = i, j
-
-                    if board[x_index][y_index] == -1:
-                        count[x_index] += 1
-
-                    elif count[x_index] != 0:
-                        board[x_index][y_index-count[x_index]] = board[x_index][y_index]
-                        board[x_index][y_index] = -1
-
-
-                elif down:
-                    x_index, y_index = self.x_boardsize-1-i, self.y_boardsize-1-j
-
-                    if board[x_index][y_index] == -1:
-                        count[y_index] += 1
-                    elif count[y_index] != 0:
-                        board[x_index +count[y_index]][y_index] = board[x_index][y_index]
-                        board[x_index][y_index] = -1
-
-                elif right:
-                    x_index, y_index = self.x_boardsize-1-i, self.y_boardsize-1-j
-
-                    if board[x_index][y_index] == -1:
-                        count[x_index] += 1
-                    elif count[x_index] != 0:
-                        board[x_index][y_index +count[x_index]] = board[x_index][y_index]
-                        board[x_index][y_index] = -1
-
-        x_count, y_count = 0,0
-        #以下ではgridに対して全探索を行っているがおいおい適切な範囲を考える必要あり
-        for i in range(self.x_boardsize):
-            x_bool = False
-            for j in range(self.y_boardsize):
-                if board[i][j] != -1:
-                    continue
-                elif board[i][j] == -1:
-                    board[i][j] = cut_val[x_count][y_count]
-
-                    # print(x_count,y_count,cut_val[x_count][y_count])
-                    x_bool = True
-                    y_count += 1
-
-            if x_bool:
-                x_count += 1
-            y_count = 0
-
-            end = time()
-
-            # print(f"action time : {end-start}")
-
-        return board
-
-    def reward(self, befor_state, state):
+    def reward(self, befor_state, state, action=None):
         """
         本メソッドでは、現在の状態(board)と入力された状態(state)をもとに報酬を計算する
         現段階では、一度に渡す報酬の最大値を1000最小値(ターンごとのペナルティ)を-1とする。
@@ -268,16 +305,27 @@ class transition():
         num_eq = 0
         num_eq_befor = 0
 
+        j_idx = 0
+
         for i in range(H):
+            countH, countW = 0, 0
             for j in range(W):
                 if state[i][j] == self.goal[i][j]:
                     num_eq += 1
+                    countW += 1
+                
+                if state[j][i] == self.goal[j][i]:
+                    countH += 1
 
-                if state[i][j] == befor_state[i][j]:
-                    num_eq_befor += 1
+            if countH == H and not self.h_countforrew[i]:
+                this_rew += 100
+
+            if countW == W and not self.w_countforrew[j_idx]:
+                this_rew += 100
+                j_idx += 1
 
         if num_eq == H*W:
-            this_rew += 1000
+            this_rew += 10000
 
         else:
                 this_rew += num_eq / (H*W) * 1000
@@ -285,16 +333,14 @@ class transition():
                 # if num_eq_befor == H*W:
                 #   this_rew = -1000
 
+        # print(this_rew)
 
 
-        keep_rew = this_rew
+        self.before_rew = this_rew
 
-        # if this_rew <= self.before_rew:
-        #     this_rew = -1 #前回以下の報酬しか得れていないのなら負の報酬を与える。ー＞より大きい報酬を得られるように学習
+        print(f"{self.num_step} this_rew : {this_rew}")
 
-        self.before_rew = keep_rew
-
-        if self.test and this_rew >= self.max_rew:
+        if self.test and num_eq > self.max_eq:
           self.max_rew = this_rew
 
           self.max_eq = num_eq
@@ -315,11 +361,13 @@ class transition():
         self.done = False
 
         self.rew = 0
-        self.h_countforrew, self.w_countforrew = 0, 0
+        self.before_rew = 0
 
         self.max_rew = -10000
         self.max_eq  = -1
         self.best_step = 0
+        self.before_act = None
+        self.ans_board = None
 
         self.ans = {"n":0, "ops":[]}
 
@@ -339,6 +387,8 @@ class transition():
         action.append(random.randint(0,3))
 
         return action
+
+"""## 学習用class定義"""
 
 """松尾研講義用コードを基本実装に使用"""
 
@@ -362,6 +412,8 @@ class Trainer:
         # 評価の間のステップ数(インターバル)．
         self.eval_interval = eval_interval
 
+        self.max_eq = 0
+
     def train(self):
         """ num_stepsステップの間，データ収集・学習・評価を繰り返す． """
 
@@ -372,6 +424,8 @@ class Trainer:
 
         # 環境を初期化する．
         state = self.env.reset()
+
+        self.evaluate(0)
 
         for steps in range(1, self.num_steps + 1):
             # 環境(self.env)，現在の状態(state)，現在のエピソードのステップ数(t)，今までのトータルのステップ数(steps)を
@@ -387,19 +441,30 @@ class Trainer:
             if steps % self.eval_interval == 0 and steps >= self.algo.start_steps:
                 self.evaluate(steps)
 
+                if self.max_eq < self.env_test.max_eq:
+                  self.max_eq = self.env_test.max_eq
+                  model_path = path + f'model_{self.env_test.max_rew}'
+                  torch.save(self.algo.actor.state_dict(), model_path + '_actor')
+                  torch.save(self.algo.critic.state_dict(), model_path + '_critic')
+                  torch.save(self.algo.critic_target.state_dict(), model_path + '_critic_target')
+
+
     def evaluate(self, steps):
         """ 複数エピソード環境を動かし，平均収益を記録する． """
 
         state = self.env_test.reset()
         done = False
+        total_reward = 0
 
         evaluate_step = 0
         while (not done):
-            print("evaluate step ", evaluate_step)
+            # print("evaluate step ", evaluate_step)
             evaluate_step += 1
             action = self.algo.exploit(state, self.env_test.goal)
             state, reward, done, _ = self.env_test.step(action)
+            total_reward += reward
 
+        print(f"total reward   is {total_reward}")
         print(f"max reward     is {self.env_test.max_rew}")
         print(f"max eq         is {self.env_test.max_eq}")
         print(f"best step      is {self.env_test.best_step}")
@@ -461,76 +526,77 @@ class Trainer:
         """ 学習開始からの経過時間． """
         return str(timedelta(seconds=int(time() - self.start_time)))
 
+"""## 学習用アルゴリズム定義"""
+
 class Algorithm(ABC):
 
     def explore(self, state, goal, batch_size=1):
         """ 確率論的な行動と，その行動の確率密度の対数 \log(\pi(a|s)) を返す． """
-        state = torch.tensor(state, dtype=torch.float, device=self.device).unsqueeze_(0)
-        with torch.no_grad():
-            action_pos, log_pi_pos, action_sellect, log_pi_sellect, action_direct, log_pi_direct = self.actor.sample(state, goal, batch_size)
+        state = torch.tensor(state, dtype=torch.float, device=self.device).clone().detach().unsqueeze_(0)
+        # with torch.no_grad():
+        action_pos, log_pi_pos, action_sellect, log_pi_sellect, action_direct, log_pi_direct = self.actor.sample(state, goal, batch_size)
 
-            action_pos, action_sellect, action_direct = torch.exp(action_pos), torch.exp(action_sellect), torch.exp(action_direct)
 
-            action_pos_list = []
-            action_pos_x = []
-            action_pos_y = []
+        action_pos, action_sellect, action_direct = action_pos + abs(torch.min(action_pos.view(-1))) + 1e-3, action_sellect + abs(torch.min(action_sellect.view(-1)))+1e-3, action_direct + abs(torch.min(action_direct.view(-1)))+1e-3
 
-            if batch_size != 1:
-              for i in range(batch_size):
-                action_pos_list.append(random.choices(self.pos_list, k=1, weights=mySqueeze(action_pos[i].cpu().numpy().tolist()))[0])
-                action_pos_x.append(action_pos_list[i] % len(state[0][0]))
-                action_pos_y.append(action_pos_list[i] // len(state[0]))
-            else:
-                action_pos_list = random.choices(self.pos_list, k=1, weights=mySqueeze(action_pos.cpu().numpy().tolist()))[0]
-                action_pos_x = action_pos_list % len(state[0][0])
-                action_pos_y = action_pos_list // len(state[0])
+        action_pos_list = []
+        action_pos_x = []
+        action_pos_y = []
+        for i in range(batch_size):
+            action_pos_list.append(random.choices(self.pos_list, k=1, weights=mySqueeze(action_pos[i].view(-1).detach().cpu().numpy().tolist()))[0])
+            action_pos_x.append(action_pos_list[i] // len(state[0]))
+            action_pos_y.append(action_pos_list[i] % len(state[0][0]))
 
 
 
-            action_sellect_list = []
-            action_direct_list = []
-            if batch_size != 1:
+        action_sellect_list = []
+        action_direct_list = []
+        if batch_size != 1:
 
-              for i in range(batch_size):
-                action_sellect_list.append(random.choices(self.sellect_list, k=1, weights=mySqueeze(action_sellect[i].cpu().numpy().tolist()))[0])
-                action_direct_list.append(random.choices(self.direct_list, k=1, weights=mySqueeze(action_direct[i].cpu().numpy().tolist()))[0])
+          for i in range(batch_size):
+            action_sellect_list.append(random.choices(self.sellect_list, k=1, weights=mySqueeze(action_sellect[i].cpu().detach().numpy().tolist()))[0])
+            action_direct_list.append(random.choices(self.direct_list, k=1, weights=mySqueeze(action_direct[i].cpu().detach().numpy().tolist()))[0])
 
-            else:
+        else:
 
-              action_sellect_list = random.choices(self.sellect_list, k=1, weights=mySqueeze(action_sellect.cpu().numpy().tolist()))[0]
-              action_direct_list = random.choices(self.direct_list, k=1, weights=mySqueeze(action_direct.cpu().numpy().tolist()))[0]
+          action_sellect_list = random.choices(self.sellect_list, k=1, weights=mySqueeze(action_sellect.cpu().detach().numpy().tolist()))[0]
+          action_direct_list = random.choices(self.direct_list, k=1, weights=mySqueeze(action_direct.cpu().detach().numpy().tolist()))[0]
 
-            if batch_size != 1:
-               action = [[action_pos_x[i], action_pos_y[i], action_sellect_list[i], action_direct_list[i]] for i in range(batch_size)]
-               log_pi = torch.tensor([[*log_pi_pos[i].cpu().numpy().tolist(), *log_pi_sellect[i].cpu().numpy().tolist(), *log_pi_direct[i].cpu().numpy().tolist()] for i in range(batch_size)])
-            else:
-               action = [int(action_pos_x), int(action_pos_y), int(action_sellect_list), int(action_direct_list)]
-               log_pi = torch.tensor([*log_pi_pos.cpu().numpy().tolist(), *log_pi_sellect.cpu().numpy().tolist(), *log_pi_direct.cpu().numpy().tolist()])
 
-        return action, mySqueeze(log_pi)
+        if batch_size != 1:
+            action = [[action_pos_x[i], action_pos_y[i], action_sellect_list[i], action_direct_list[i]] for i in range(batch_size)]
+            log_pi = torch.cat([log_pi_pos, log_pi_sellect, log_pi_direct], dim=0).view(-1)
+        else:
+            action = [int(mySqueeze(action_pos_x)), int(mySqueeze(action_pos_y)), int(mySqueeze(action_sellect_list)), int(mySqueeze(action_direct_list))]
+            log_pi = torch.cat([log_pi_pos, log_pi_sellect, log_pi_direct], dim=0).view(-1)
+
+        return action, log_pi
 
     def exploit(self, state, goal):
-        """ 決定論的な行動を返す． """
         # print(f"state shape = ({len(state)}, {len(state[0])})")
         # print(f"goal shape = ({len(goal)}, {len(goal[0])})")
         state = torch.tensor(state, dtype=torch.float, device=self.device).unsqueeze_(0)
         with torch.no_grad():
             action_pos, action_sellect, action_direct = self.actor(state, goal)
-            action_pos = torch.argmax(action_pos, dim=-1).cpu().numpy()
+            action_pos, action_sellect, action_direct = action_pos + abs(torch.min(action_pos.view(-1))) + 1e-3, action_sellect + abs(torch.min(action_sellect.view(-1)))+1e-3, action_direct + abs(torch.min(action_direct.view(-1)))+1e-3
+            # action_pos = torch.argmax(action_pos.view(1,-1), dim=-1).cpu().numpy()
+            action_pos = random.choices(self.pos_list, k=1, weights=action_pos.view(-1).detach().cpu().numpy().tolist())[0]
 
             # print(f"state shape = ({len(state)}, {len(state[0])})")
 
             # print(f"action_pos = {action_pos}")
 
 
-            action_pos_x = action_pos % len(state[0][0])
-            action_pos_y = action_pos // len(state[0])
+            action_pos_x = action_pos // len(state[0])
+            action_pos_y = action_pos % len(state[0][0])
 
             print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
 
-            action_sellect = torch.argmax(action_sellect, dim=-1).cpu().numpy()
+            # action_sellect = torch.argmax(action_sellect, dim=-1).cpu().numpy()
+            action_sellect = random.choices(self.sellect_list, k=1, weights=action_sellect.view(-1).cpu().detach().numpy().tolist())[0]
 
-            action_direct = torch.argmax(action_direct, dim=-1).cpu().numpy()
+            # action_direct = torch.argmax(action_direct, dim=-1).cpu().numpy()
+            action_direct = random.choices(self.direct_list, k=1, weights=action_direct.view(-1).cpu().detach().numpy().tolist())[0]
 
 
             action = [int(action_pos_x), int(action_pos_y), int(action_sellect), int(action_direct)]
@@ -554,44 +620,6 @@ class Algorithm(ABC):
         """ 1回分の学習を行う． """
         pass
 
-def calculate_log_pi(log_stds, noises, actions):
-    """ 確率論的な行動の確率密度を返す． """
-    # ガウス分布 `N(0, stds * I)` における `noises * stds` の確率密度の対数(= \log \pi(u|a))を計算する．
-    # (torch.distributions.Normalを使うと無駄な計算が生じるので，下記では直接計算しています．)
-    gaussian_log_probs = \
-        (-0.5 * noises.pow(2) - log_stds).sum(dim=-1, keepdim=True) - 0.5 * math.log(2 * math.pi) * log_stds.size(-1)
-
-    # tanh による確率密度の変化を修正する．
-    log_pis = gaussian_log_probs - torch.log(1 - actions.pow(2) + 1e-6).sum(dim=-1, keepdim=True)
-
-    return log_pis
-
-def reparameterize(means, log_stds):
-    """ Reparameterization Trickを用いて，確率論的な行動とその確率密度を返す． """
-    # 標準偏差．
-    stds = log_stds.exp()
-    # 標準ガウス分布から，ノイズをサンプリングする．
-    noises = torch.randn_like(means)
-    # Reparameterization Trickを用いて，N(means, stds)からのサンプルを計算する．
-    us = means + noises * stds
-    # tanh　を適用し，確率論的な行動を計算する．
-    actions = torch.tanh(us)
-
-    # 確率論的な行動の確率密度の対数を計算する．
-    log_pis = calculate_log_pi(log_stds, noises, actions)
-
-    return actions, log_pis
-
-def atanh(x):
-    """ tanh の逆関数． """
-    return 0.5 * (torch.log(1 + x + 1e-6) - torch.log(1 - x + 1e-6))
-
-
-def evaluate_lop_pi(means, log_stds, actions):
-    """ 平均(mean)，標準偏差の対数(log_stds)でパラメータ化した方策における，行動(actions)の確率密度の対数を計算する． """
-    noises = (atanh(actions) - means) / (log_stds.exp() + 1e-8)
-    return calculate_log_pi(log_stds, noises, actions)
-
 """**SACの実装**
 
 ### network構築1
@@ -605,14 +633,14 @@ class TwoConvBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, out_channels):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, middle_channels, kernel_size = 3, padding="same")
-        self.bn1 = nn.BatchNorm2d(middle_channels)
+        # self.bn1 = nn.BatchNorm2d(middle_channels)
         self.rl = nn.ReLU()
         self.conv2 = nn.Conv2d(middle_channels, out_channels, kernel_size = 3, padding="same")
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.bn1(x)
+        # x = self.bn1(x)
         x = self.rl(x)
         x = self.conv2(x)
         x = self.bn2(x)
@@ -623,13 +651,13 @@ class UpConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-        self.bn1 = nn.BatchNorm2d(in_channels)
+        # self.bn1 = nn.BatchNorm2d(in_channels)
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size = 2, padding="same")
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.up(x)
-        x = self.bn1(x)
+        # x = self.bn1(x)
         x = self.conv(x)
         x = self.bn2(x)
         return x
@@ -651,19 +679,19 @@ class SACActor(nn.Module):
         self.TCB2 = TwoConvBlock(16, 32, 32)
         self.TCB3 = TwoConvBlock(32, 64, 64)
         self.TCB4 = TwoConvBlock(64, 128, 128)
-        self.TCB5 = TwoConvBlock(128, 256, 256)
+        # self.TCB5 = TwoConvBlock(128, 256, 256)
 
-        self.linear_sellect = nn.Linear(256, 2 * num_of_cutter)
-        self.linear_direction = nn.Linear(256, 2 * 4)
+        self.linear_sellect = nn.Linear(128, 2 * num_of_cutter)
+        self.linear_direction = nn.Linear(128, 2 * 4)
 
-        self.TCB6 = TwoConvBlock(256, 128, 128)
+        # self.TCB6 = TwoConvBlock(256, 128, 128)
         self.TCB7 = TwoConvBlock(128, 64, 64)
         self.TCB8 = TwoConvBlock(64, 32, 32)
         self.TCB9 = TwoConvBlock(32, 16, 16)
         self.maxpool = nn.MaxPool2d(2, stride = 2)
         self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.UC1 = UpConv(256, 128)
+        # self.UC1 = UpConv(256, 128)
         self.UC2 = UpConv(128, 64)
         self.UC3 = UpConv(64, 32)
         self.UC4= UpConv(32, 16)
@@ -674,8 +702,8 @@ class SACActor(nn.Module):
 
         start = time()
 
-        state     = torch.tensor(states).clone().to("cuda" if torch.cuda.is_available() else "cpu")
-        goal_copy = torch.tensor(goal).clone().repeat(batch_size, 1, 1).to("cuda" if torch.cuda.is_available() else "cpu")
+        state     = torch.tensor(states).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
+        goal_copy = torch.tensor(goal).clone().detach().repeat(batch_size, 1, 1).to("cuda" if torch.cuda.is_available() else "cpu")
 
         #各配列を結合しやすいように形成する
 
@@ -703,10 +731,10 @@ class SACActor(nn.Module):
         x = self.maxpool(x)
 
         x = self.TCB4(x)
-        x4 = x
-        x = self.maxpool(x)
+        # x4 = x
+        # x = self.maxpool(x)
 
-        x = self.TCB5(x)
+        # x = self.TCB5(x)
 
         x_sellect_direction = self.gap(x).view(batch_size, -1)
         x_sellect = self.linear_sellect(x_sellect_direction).chunk(2, dim=-1)[0]
@@ -715,9 +743,9 @@ class SACActor(nn.Module):
         return_sellect = torch.tanh(x_sellect)
         return_direct = torch.tanh(x_direction)
 
-        x = self.UC1(x)
-        x = torch.cat([x4, x], dim = 1)
-        x = self.TCB6(x)
+        # x = self.UC1(x)
+        # x = torch.cat([x4, x], dim = 1)
+        # x = self.TCB6(x)
 
         x = self.UC2(x)
         x = torch.cat([x3, x], dim = 1)
@@ -743,8 +771,8 @@ class SACActor(nn.Module):
 
     def sample(self, states, goal, batch_size=1):
 
-        state     = torch.tensor(states).clone().to("cuda" if torch.cuda.is_available() else "cpu")
-        goal_copy = torch.tensor(goal).clone().to("cuda" if torch.cuda.is_available() else "cpu")
+        state     = torch.tensor(states).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
+        goal_copy = torch.tensor(goal).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
 
         if batch_size == 1:
           goal_copy = goal_copy.unsqueeze(0)
@@ -772,18 +800,18 @@ class SACActor(nn.Module):
         x = self.maxpool(x)
 
         x = self.TCB4(x)
-        x4 = x
-        x = self.maxpool(x)
+        # x4 = x
+        # x = self.maxpool(x)
 
-        x = self.TCB5(x)
+        # x = self.TCB5(x)
 
         x_sellect_direction = self.gap(x).view(batch_size, -1)
         means_sellect, log_stds_sellect = self.linear_sellect(x_sellect_direction).chunk(2, dim=-1)
         means_direct, log_stds_direct = self.linear_direction(x_sellect_direction).chunk(2, dim=-1)
 
-        x = self.UC1(x)
-        x = torch.cat([x4, x], dim = 1)
-        x = self.TCB6(x)
+        # x = self.UC1(x)
+        # x = torch.cat([x4, x], dim = 1)
+        # x = self.TCB6(x)
 
         x = self.UC2(x)
         x = torch.cat([x3, x], dim = 1)
@@ -813,21 +841,40 @@ class SACCritic(nn.Module):
     def __init__(self, side_size=256):
         super().__init__()
 
+        self.TCB1 = TwoConvBlock(3, 16, 16)
+        self.TCB2 = TwoConvBlock(16, 32, 32)
+        self.TCB3 = TwoConvBlock(32, 64, 64)
+        self.TCB4 = TwoConvBlock(64, 128, 128)
+
+        self.TCB7 = TwoConvBlock(128, 64, 64)
+        self.TCB8 = TwoConvBlock(64, 32, 32)
+        self.TCB9 = TwoConvBlock(32, 16, 16)
+        self.maxpool = nn.MaxPool2d(2, stride = 2)
+
+        self.UC1 = UpConv(256, 128)
+        self.UC2 = UpConv(128, 64)
+        self.UC3 = UpConv(64, 32)
+        self.UC4= UpConv(32, 16)
+
+        self.gap = nn.AdaptiveAvgPool2d(1)
+
+        self.linear = nn.Linear(16, 2)
+
         #学習済みモデル使用用に書き換え
 
         # Resnet50を重み付きで読み込む
-        self.net = models.resnet50(pretrained = True)
+        # self.net = models.resnet50(pretrained = True)
 
-        # 最終ノードの出力を変更する
-        self.net.fc = nn.Linear(self.net.fc.in_features,  2)
+        # # 最終ノードの出力を変更する
+        # self.net.fc = nn.Linear(self.net.fc.in_features,  2)
 
     def forward(self, states, after_actions, goal, batch_size=1):
 
         start = time()
 
-        state        = torch.tensor(states).clone().to("cuda" if torch.cuda.is_available() else "cpu")
-        after_action = torch.tensor(after_actions).clone().to("cuda" if torch.cuda.is_available() else "cpu")
-        goal_copy    = torch.tensor(goal).clone().to("cuda" if torch.cuda.is_available() else "cpu")
+        state = states.clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
+        after_action = after_actions.clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
+        goal_copy = goal.clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
 
         if state.dim() > 3:
           state = state.squeeze()
@@ -842,15 +889,36 @@ class SACCritic(nn.Module):
 
         x = torch.cat([state, after_action, goal_copy], dim=1)
 
-        # state = resize(states, batch_size, shape=[256, 256]).to("cuda" if torch.cuda.is_available() else "cpu")
-        # after_action = resize(after_actions, batch_size, shape=[256, 256]).to("cuda" if torch.cuda.is_available() else "cpu")
-        # goal_copy = resize(goal, batch_size, shape=[256, 256]).to("cuda" if torch.cuda.is_available() else "cpu")
+        #データをネットワークに通す
+        x = self.TCB1(x)
+        x1 = x
+        x = self.maxpool(x)
 
-        # state, after_action, goal_copy = state.squeeze(), after_action.squeeze(), goal_copy.squeeze()
-        # state, after_action, goal_copy = state.unsqueeze(1), after_action.unsqueeze(1), goal_copy.unsqueeze(1) # mini-batchに対応させる
-        # x = torch.cat([state, after_action, goal_copy], dim=1)
+        x = self.TCB2(x)
+        x2 = x
+        x = self.maxpool(x)
 
-        x = self.net(x)
+        x = self.TCB3(x)
+        x3 = x
+        x = self.maxpool(x)
+
+        x = self.TCB4(x)
+
+        x = self.UC2(x)
+        x = torch.cat([x3, x], dim = 1)
+        x = self.TCB7(x)
+
+        x = self.UC3(x)
+        x = torch.cat([x2, x], dim = 1)
+        x = self.TCB8(x)
+
+        x = self.UC4(x)
+        x = torch.cat([x1, x], dim = 1)
+        x = self.TCB9(x)
+
+        x = self.gap(x).view(batch_size, -1)
+
+        x = self.linear(x)
 
         end = time()
 
@@ -889,7 +957,9 @@ class ReplayBuffer:
         self._n = min(self._n + 1, self.buffer_size)
 
     def sample(self, batch_size):
-        idxes = np.random.randint(low=0, high=self._n, size=batch_size)
+        # idxes = np.random.randint(low=0, high=self._n, size=batch_size)
+        idxes = np.arange(batch_size) + np.random.randint(low=0, high=self._n - batch_size, size=1)
+        print(f"sample indexes = {idxes}")
         return (
             self.states[idxes],
             self.actions[idxes],
@@ -903,7 +973,8 @@ class SAC(Algorithm):
 
     def __init__(self, state_shape, action_shape, num_of_cutter, device=torch.device('cuda'), seed=0,
                  batch_size=256, gamma=0.99, lr_actor=3e-4, lr_critic=3e-4,
-                 replay_size=10**3, start_steps=2*10**2, tau=5e-3, alpha=0.2, reward_scale=1.0):
+                 replay_size=10**4, start_steps=2*10**2, tau=5e-3, alpha=0.2, reward_scale=1.0,
+                 pretrain = False, model_weight_name = None):
         super().__init__()
 
         # シードを設定する．
@@ -930,8 +1001,19 @@ class SAC(Algorithm):
 
         self.critic_target = SACCritic().to(device).eval()
 
-        # ターゲットネットワークの重みを初期化し，勾配計算を無効にする．
-        self.critic_target.load_state_dict(self.critic.state_dict())
+        if pretrain:
+
+          model_path = path + model_weight_name
+
+
+          self.actor.load_state_dict(torch.load(model_path + '_actor'))
+          self.critic.load_state_dict(torch.load(model_path + '_critic'))
+          self.critic_target.load_state_dict(torch.load(model_path + '_critic_target'))
+
+        else:
+          # ターゲットネットワークの重みを初期化し，勾配計算を無効にする．
+          self.critic_target.load_state_dict(self.critic.state_dict())
+
         for param in self.critic_target.parameters():
             param.requires_grad = False
 
@@ -957,7 +1039,7 @@ class SAC(Algorithm):
 
     def is_update(self, steps):
         # 学習初期の一定期間(start_steps)は学習しない．
-        return steps >= max(self.start_steps, self.batch_size)
+        return steps >= max(self.start_steps, self.batch_size) and steps % self.batch_size == 0
 
     def step(self, env, state, t, steps):
         t += 1
@@ -1008,37 +1090,50 @@ class SAC(Algorithm):
     def update_critic(self, states, rewards, dones, next_states, goal, env):
         curr_qs = self.critic(states, next_states, goal, batch_size = self.batch_size)
 
-        with torch.no_grad():
-            next_actions, log_pis = self.explore(next_states, goal, self.batch_size)
-            curr_qs1, curr_qs2 = curr_qs.chunk(2, dim=-1)
+        # with torch.no_grad():
+        next_actions, log_pis = self.explore(next_states, goal, self.batch_size)
+        curr_qs1, curr_qs2 = curr_qs.chunk(2, dim=-1)
 
-            """
-            env.actionはいじらずにここでbatch対応させる。
-            networkについてはbatch対応させる（これに関しては計算効率向上）
-            """
-            #tensorで初期化しないとエラーの原因になる
-            after_next_actions = torch.empty((self.batch_size, next_states[0].shape[0], next_states[0].shape[1]), dtype=torch.float, device=self.device)
+        """
+        env.actionはいじらずにここでbatch対応させる。
+        networkについてはbatch対応させる（これに関しては計算効率向上）
+        """
+        #tensorで初期化しないとエラーの原因になる
+        after_next_actions = torch.empty((self.batch_size, next_states[0].shape[0], next_states[0].shape[1]), dtype=torch.float, device=self.device)
 
-            act_start = time()
-            for i in range(self.batch_size):
-              after_next_actions[i] = env.action(next_states[i], [next_actions[i][0], next_actions[i][1]], env.cutter[next_actions[i][2]], next_actions[i][3])
+        act_start = time()
+        for i in range(self.batch_size):
+          after_next_actions[i] = env.action(next_states[i], [next_actions[i][0], next_actions[i][1]], env.cutter[next_actions[i][2]], next_actions[i][3])
 
-            act_end = time()
-            print(f"act time is {act_end - act_start}")
+        act_end = time()
+        print(f"act time is {act_end - act_start}")
 
 
-            next_qs = self.critic_target(next_states, after_next_actions, goal, batch_size = self.batch_size)
+        next_qs = self.critic_target(next_states, after_next_actions, goal, batch_size = self.batch_size)
 
-            next_qs = torch.tensor(torch.min(next_qs, dim=-1).values.mean()) - self.alpha * torch.tensor(log_pis).mean()
+        next_qs = torch.tensor(torch.min(next_qs, dim=0).values.mean()) - self.alpha * torch.tensor(log_pis).mean()
+
+
         target_qs = rewards * self.reward_scale + (1.0 - dones) * self.gamma * next_qs
 
-        loss_critic1 = (curr_qs1.mean() - target_qs).pow_(2).mean()
-        loss_critic2 = (curr_qs2.mean() - target_qs).pow_(2).mean()
+        loss_critic1 = (curr_qs1.mean() - target_qs).pow_(2).mean() / 10**8
+        loss_critic2 = (curr_qs2.mean() - target_qs).pow_(2).mean() / 10**8
+
+        print(f"critic loss = {(loss_critic1 + loss_critic2).mean()}")
 
         critic_update_start = time()
 
         self.optim_critic.zero_grad()
-        (loss_critic1 + loss_critic2).mean().backward(retain_graph=False)
+
+
+        (loss_critic1 + loss_critic2).mean().backward(retain_graph=True)
+
+
+        # for name, param in self.critic.named_parameters():
+        #   if param.grad is not None:
+        #       print(f"Gradients for {name}: {param.grad.mean()}")
+        #   else:
+        #       print("grad is None")
 
         self.optim_critic.step()
 
@@ -1058,11 +1153,19 @@ class SAC(Algorithm):
         print(f"act time is {act_end - act_start}")
 
         qs = self.critic(states, next_states, goal, batch_size = self.batch_size)
-        loss_actor = (self.alpha * torch.tensor(log_pis).mean() - torch.min(qs, dim=-1).values.mean()).mean()
+        loss_actor = (self.alpha * log_pis.mean() - torch.min(qs, dim=-1).values.mean()).mean()
+        print(f"actor loss = {loss_actor}")
 
         actor_update_start = time()
         self.optim_actor.zero_grad()
-        loss_actor.backward(retain_graph=False)
+        loss_actor.backward(retain_graph=True)
+
+        # for name, param in self.actor.named_parameters():
+        #   if param.grad is not None:
+        #       print(f"Gradients for {name}: {param.grad.mean()}")
+
+        #   else:
+        #       print("gradient is None")
 
         self.optim_actor.step()
         actor_update_end = time()
