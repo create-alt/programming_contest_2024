@@ -130,7 +130,7 @@ plt.show()
 SEED = 0
 REWARD_SCALE = 0.99
 NUM_STEPS = 5 * 10 ** 4
-BATCH_SIZE = 128
+BATCH_SIZE = 1000
 EVAL_INTERVAL = BATCH_SIZE * 10
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
@@ -149,8 +149,8 @@ algo = SAC(
     batch_size=BATCH_SIZE,
     lr_actor=3e-3,
     lr_critic=3e-3,
-    replay_size=10**4,
-    start_steps=256,
+    replay_size=10**5,
+    start_steps=1000,
     # pretrain = True,
     # model_weight_name = 'model_best'
 )

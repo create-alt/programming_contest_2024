@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from time import time
 from datetime import timedelta
 import random
+import math
 import copy
 import math
 import numpy as np
@@ -20,7 +21,8 @@ import torch.nn.functional as F
 from torchvision import models
 
 
-path = "../model_weights/"
+path = "..\model_weights"
+EPISODE_SIZE = 1000
 
 """## 関数定義"""
 
@@ -119,7 +121,7 @@ class transition():
         self.cutter = copy.deepcopy(cutter)
         self.done  = False
         self.num_step = 0
-        self._max_episode_steps = 1000
+        self._max_episode_steps = EPISODE_SIZE
         self.frequ = frequ #frequは報酬の獲得頻度を表す。
         self.before_rew = 0
 
@@ -127,25 +129,11 @@ class transition():
 
         self.h_countforrew, self.w_countforrew= [], [] # 左or上詰めで、行・列の一致に報酬を与えるが、もともと一致していると過剰な報酬を与えることになるので、事前に一致している行・列を格納
 
+        self.default_eq = 0
         for i in range(self.x_boardsize):
-          countH, countW = 0, 0
           for j in range(self.y_boardsize):
             if board[i][j] == goal[i][j]:
-              countW += 1
-
-            if board[j][i] == goal[j][i]:
-              countH += 1
-
-          if countW == self.y_boardsize:
-            self.w_countforrew.append(True)
-          else:
-            self.w_countforrew.append(False)
-
-          if countH == self.x_boardsize:
-            self.h_countforrew.append(True)
-          else:
-            self.h_countforrew.append(False)
-
+              self.default_eq += 1
 
         self.num_of_cutter = len(self.cutter)
         self.state_shape  = [len(board), len(board[0])]
@@ -305,30 +293,16 @@ class transition():
         num_eq = 0
         num_eq_befor = 0
 
-        j_idx = 0
-
         for i in range(H):
-            countH, countW = 0, 0
             for j in range(W):
                 if state[i][j] == self.goal[i][j]:
                     num_eq += 1
-                    countW += 1
-                
-                if state[j][i] == self.goal[j][i]:
-                    countH += 1
-
-            if countH == H and not self.h_countforrew[i]:
-                this_rew += 100
-
-            if countW == W and not self.w_countforrew[j_idx]:
-                this_rew += 100
-                j_idx += 1
 
         if num_eq == H*W:
-            this_rew += 10000
+            this_rew += 1000
 
         else:
-                this_rew += num_eq / (H*W) * 1000
+                this_rew += num_eq - self.default_eq
 
                 # if num_eq_befor == H*W:
                 #   this_rew = -1000
@@ -435,7 +409,8 @@ class Trainer:
 
             # アルゴリズムが準備できていれば，1回学習を行う．
             if self.algo.is_update(steps):
-                self.algo.update(self.env)
+                for _ in range(5):
+                 self.algo.update(self.env)
 
             # 一定のインターバルで評価する．
             if steps % self.eval_interval == 0 and steps >= self.algo.start_steps:
@@ -851,7 +826,7 @@ class SACCritic(nn.Module):
         self.TCB9 = TwoConvBlock(32, 16, 16)
         self.maxpool = nn.MaxPool2d(2, stride = 2)
 
-        self.UC1 = UpConv(256, 128)
+        #self.UC1 = UpConv(256, 128)
         self.UC2 = UpConv(128, 64)
         self.UC3 = UpConv(64, 32)
         self.UC4= UpConv(32, 16)
@@ -958,7 +933,7 @@ class ReplayBuffer:
 
     def sample(self, batch_size):
         # idxes = np.random.randint(low=0, high=self._n, size=batch_size)
-        idxes = np.arange(batch_size) + np.random.randint(low=0, high=self._n - batch_size, size=1)
+        idxes = np.arange(EPISODE_SIZE) + np.random.randint(low=0, high=self._n // EPISODE_SIZE, size=1) * 1000
         print(f"sample indexes = {idxes}")
         return (
             self.states[idxes],
@@ -1039,7 +1014,7 @@ class SAC(Algorithm):
 
     def is_update(self, steps):
         # 学習初期の一定期間(start_steps)は学習しない．
-        return steps >= max(self.start_steps, self.batch_size) and steps % self.batch_size == 0
+        return steps >= self.start_steps and steps % EPISODE_SIZE == 0
 
     def step(self, env, state, t, steps):
         t += 1
@@ -1103,7 +1078,10 @@ class SAC(Algorithm):
 
         act_start = time()
         for i in range(self.batch_size):
-          after_next_actions[i] = env.action(next_states[i], [next_actions[i][0], next_actions[i][1]], env.cutter[next_actions[i][2]], next_actions[i][3])
+          if i == self.batch_size - 1:
+              after_next_actions[i] = env.action(next_states[i], [next_actions[i][0], next_actions[i][1]], env.cutter[next_actions[i][2]], next_actions[i][3])
+              break
+          after_next_actions[i] = next_states[i+1]
 
         act_end = time()
         print(f"act time is {act_end - act_start}")
@@ -1116,8 +1094,8 @@ class SAC(Algorithm):
 
         target_qs = rewards * self.reward_scale + (1.0 - dones) * self.gamma * next_qs
 
-        loss_critic1 = (curr_qs1.mean() - target_qs).pow_(2).mean() / 10**8
-        loss_critic2 = (curr_qs2.mean() - target_qs).pow_(2).mean() / 10**8
+        loss_critic1 = (curr_qs1.mean() - target_qs).pow_(2).mean() / 10**3
+        loss_critic2 = (curr_qs2.mean() - target_qs).pow_(2).mean() / 10**3
 
         print(f"critic loss = {(loss_critic1 + loss_critic2).mean()}")
 
@@ -1146,8 +1124,12 @@ class SAC(Algorithm):
         next_states = torch.empty((self.batch_size, states[0].shape[0], states[0].shape[1]), dtype=torch.float, device=self.device)
 
         act_start = time()
+
         for i in range(self.batch_size):
-            next_states[i] = env.action(states[i], [actions[i][0], actions[i][1]], env.cutter[actions[i][2]], actions[i][3])
+            if i == self.batch_size - 1:
+              next_states[i] = env.action(states[i], [actions[i][0], actions[i][1]], env.cutter[actions[i][2]], actions[i][3])
+              break
+            next_states[i] = states[i+1]
 
         act_end = time()
         print(f"act time is {act_end - act_start}")
