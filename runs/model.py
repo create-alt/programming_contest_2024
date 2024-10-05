@@ -476,6 +476,7 @@ class Trainer:
         with open(f"./test_initial_{self.env_test.max_rew}_{self.env_test.best_step}.json", 'w') as f:
             json.dump(output, f, indent=2)
 
+	"""
         # solution.json を読み込む
         with open(f"./test_initial_{self.env_test.max_rew}_{self.env_test.best_step}.json", 'r') as f:
   	        solution_data = json.load(f)
@@ -488,6 +489,7 @@ class Trainer:
 
 	# レスポンスのステータスコードと内容を確認
         print("Status Code:", response.status_code)
+	"""
 
     def plot_return(self):
         """ 平均収益のグラフを描画する． """
