@@ -4,8 +4,100 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import copy
 import json
+import requests
 
 from model import transition, SAC, Trainer 
+
+SEED = 0
+random.seed(SEED)
+
+"""
+#本番前にはここを実行可能にして下の自作部分を隠す
+# ヘッダーの設定
+headers = {
+    "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"
+}
+
+# GET リクエストを送信
+response = requests.get("http://localhost:8080/problem", headers=headers)
+
+# レスポンスのステータスコードを確認
+if response.status_code == 200:
+
+    data = response.json()
+    # レスポンスの内容をファイルに保存
+    #with open('response.json', 'w') as f:
+    #    json.dump(response.json(), f, indent=4)
+    print("Response caught and saved to response.json")
+
+else:
+    print(f"Failed to fetch data: {response.status_code}")
+
+# 取得したデータを表示
+
+start = data["board"]["start"]
+goal  = data["board"]["goal"]
+
+H, W = data["board"]["height"], data["board"]["width"]
+
+for i in range(H):
+    for j in range(W):
+        board_train = int(start[i][j])
+        board_test  = int(start[i][j])
+
+        goal_train = int(goal[i][j])
+        goal_test  = int(goal[i][j])
+
+"""
+
+#定型抜き型を作成
+cutter = [[[1]]]
+
+for size in [2, 4, 8, 16, 32, 64, 128, 256]:
+    grid = []
+    #すべてが1の抜き型
+    for i in range(size):
+        grid.append([])
+        for j in range(size):
+            grid[i].append(1)
+
+    cutter.append(grid)
+
+    grid = []
+    #1マスおきに列が1の抜き型
+    for i in range(size):
+        grid.append([])
+        for j in range(size):
+            if j%2 == 0:
+                grid[i].append(1)
+            else:
+                grid[i].append(0)
+
+    cutter.append(grid)
+
+    grid = []
+    #1マスおきに行が1の抜き型
+    for i in range(size):
+        grid.append([])
+        for j in range(size):
+            if i%2 == 0:
+                grid[i].append(1)
+            else:
+                grid[i].append(0)
+
+    cutter.append(grid)
+
+#cutterに一般抜き型を追加する
+cutters = data["general"]["patterns"]
+
+for _ in range(data["general"]["n"]):
+    cut_info = cutters[i]
+    grid=[]
+    for i in range(cut_info["height"]):
+        grid.append([])
+        for j in range(cut_info["width"]):
+            grid[i].append(int(cut_info["cells"][i][j]))
+
 
 
 
@@ -21,9 +113,6 @@ boardやcutterの作成
 board_train = []
 
 board_size = 32
-
-SEED = 0
-random.seed(SEED)
 
 for i in range(board_size):
   board_train.append([])
@@ -50,41 +139,6 @@ for i in range(board_size):
       count+=1
 
 print(count)
-
-cutter = []
-
-for size in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
-    grid = []
-    for i in range(size):
-        grid.append([])
-        for j in range(size):
-            grid[i].append(1)
-
-    cutter.append(grid)
-
-    grid = []
-    for i in range(size):
-        grid.append([])
-        for j in range(size):
-            if j%2 == 0:
-                grid[i].append(1)
-            else:
-                grid[i].append(0)
-
-    cutter.append(grid)
-
-    grid = []
-    for i in range(size):
-        grid.append([])
-        for j in range(size):
-            if i%2 == 0:
-                grid[i].append(1)
-            else:
-                grid[i].append(0)
-
-    cutter.append(grid)
-
-
 
 
 """

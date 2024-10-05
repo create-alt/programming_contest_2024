@@ -11,7 +11,7 @@ from matplotlib.colors import ListedColormap
 import gc
 from pprint import pprint
 import json
-import subprocess
+import requests
 
 import torch
 import torchvision
@@ -476,6 +476,19 @@ class Trainer:
         with open(f"./test_initial_{self.env_test.max_rew}_{self.env_test.best_step}.json", 'w') as f:
             json.dump(output, f, indent=2)
 
+        # solution.json を読み込む
+        with open(f"./test_initial_{self.env_test.max_rew}_{self.env_test.best_step}.json", 'r') as f:
+  	        solution_data = json.load(f)
+
+	    # ヘッダーの設定
+        headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+
+	    # POST リクエストを送信
+        response = requests.post("http://localhost:8080/answer", headers=headers, json=solution_data)
+
+	# レスポンスのステータスコードと内容を確認
+        print("Status Code:", response.status_code)
+
     def plot_return(self):
         """ 平均収益のグラフを描画する． """
         fig = plt.figure(figsize=(8, 6))
@@ -500,7 +513,6 @@ class Trainer:
     def time(self):
         """ 学習開始からの経過時間． """
         return str(timedelta(seconds=int(time() - self.start_time)))
-
 """## 学習用アルゴリズム定義"""
 
 class Algorithm(ABC):
