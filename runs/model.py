@@ -21,8 +21,8 @@ import torch.nn.functional as F
 from torchvision import models
 
 
-path = "..\model_weights"
-EPISODE_SIZE = 1000
+path = "../model_weights/"
+host_name = "http://localhost:8080"
 
 """## 関数定義"""
 
@@ -102,7 +102,7 @@ class transition():
     本クラスはenv(学習環境)として扱うクラスであるので、
     行動に対して次の状態と報酬、実行が終わったかどうかを返す。
     """
-    def __init__(self, board, cutter, goal, frequ=1, test=False):
+    def __init__(self, board, cutter, goal, frequ=1, test=False, EPISODE_SIZE = 1000):
         """
         board (2次元list)  => 最初に与えられたボードの状態(0~3)
                                 臨時的な値として'-1'は穴抜けを表す
@@ -141,6 +141,7 @@ class transition():
 
         self.max_rew = -10000
         self.max_eq  = -1
+        self.num_eq = 0
         self.best_step = 0
 
         self.ans = {"n":0, "ops":[]}
@@ -283,7 +284,7 @@ class transition():
       return board
 
 
-    def reward(self, befor_state, state, action=None):
+    def reward(self, before_state, state, action=None):
         """
         本メソッドでは、現在の状態(board)と入力された状態(state)をもとに報酬を計算する
         現段階では、一度に渡す報酬の最大値を1000最小値(ターンごとのペナルティ)を-1とする。
@@ -291,23 +292,28 @@ class transition():
         H, W = len(state), len(state[0])
         this_rew = 0 #本stepで獲得した報酬を格納
         num_eq = 0
-        num_eq_befor = 0
+        num_eq_before = 0
 
         for i in range(H):
             for j in range(W):
                 if state[i][j] == self.goal[i][j]:
                     num_eq += 1
 
+                if state[i][j] == before_state[i][j]:
+                    num_eq_before += 1
+
         if num_eq == H*W:
             this_rew += 1000
 
         else:
-                this_rew += num_eq - self.default_eq
+                this_rew += (num_eq - self.default_eq) / math.sqrt(H*W)
 
                 # if num_eq_befor == H*W:
                 #   this_rew = -1000
 
         # print(this_rew)
+
+        self.num_eq = num_eq_before / H*W
 
 
         self.before_rew = this_rew
@@ -339,6 +345,7 @@ class transition():
 
         self.max_rew = -10000
         self.max_eq  = -1
+        self.num_eq = 0
         self.best_step = 0
         self.before_act = None
         self.ans_board = None
@@ -388,6 +395,8 @@ class Trainer:
 
         self.max_eq = 0
 
+        self.befor_state = None
+
     def train(self):
         """ num_stepsステップの間，データ収集・学習・評価を繰り返す． """
 
@@ -404,12 +413,13 @@ class Trainer:
         for steps in range(1, self.num_steps + 1):
             # 環境(self.env)，現在の状態(state)，現在のエピソードのステップ数(t)，今までのトータルのステップ数(steps)を
             # アルゴリズムに渡し，状態・エピソードのステップ数を更新する．
-            state, t = self.algo.step(self.env, state, t, steps)
+            state, t = self.algo.step(self.env, self.befor_state, state, t, steps)
+            self.befor_state = copy.deepcopy(state)
             print(steps)
 
             # アルゴリズムが準備できていれば，1回学習を行う．
             if self.algo.is_update(steps):
-                for _ in range(5):
+                for _ in range(10):
                  self.algo.update(self.env)
 
             # 一定のインターバルで評価する．
@@ -428,16 +438,29 @@ class Trainer:
         """ 複数エピソード環境を動かし，平均収益を記録する． """
 
         state = self.env_test.reset()
+        befor = None
         done = False
         total_reward = 0
 
         evaluate_step = 0
+
+        num_eq_before = 0
+        rand = False
         while (not done):
             # print("evaluate step ", evaluate_step)
             evaluate_step += 1
-            action = self.algo.exploit(state, self.env_test.goal)
+            action = self.algo.exploit(befor, state, self.env_test.goal, rand=rand)
+            befor = state
             state, reward, done, _ = self.env_test.step(action)
             total_reward += reward
+
+            if rand:
+                rand=False
+            
+            if abs(num_eq_before - self.env_test.num_eq) < 0.0005:
+                rand = True
+
+            num_eq_before = self.env_test.num_eq
 
         print(f"total reward   is {total_reward}")
         print(f"max reward     is {self.env_test.max_rew}")
@@ -476,7 +499,7 @@ class Trainer:
         with open(f"./test_initial_{self.env_test.max_rew}_{self.env_test.best_step}.json", 'w') as f:
             json.dump(output, f, indent=2)
 
-	"""
+    """
         # solution.json を読み込む
         with open(f"./test_initial_{self.env_test.max_rew}_{self.env_test.best_step}.json", 'r') as f:
   	        solution_data = json.load(f)
@@ -485,9 +508,9 @@ class Trainer:
         headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
 
 	    # POST リクエストを送信
-        response = requests.post("http://localhost:8080/answer", headers=headers, json=solution_data)
+        response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
 
-	# レスポンスのステータスコードと内容を確認
+	    # レスポンスのステータスコードと内容を確認
         print("Status Code:", response.status_code)
 	"""
 
@@ -519,11 +542,18 @@ class Trainer:
 
 class Algorithm(ABC):
 
-    def explore(self, state, goal, batch_size=1):
-        """ 確率論的な行動と，その行動の確率密度の対数 \log(\pi(a|s)) を返す． """
+    def explore(self, befor, state, goal, batch_size=1):
+        """ 確率論的な行動と，その行動の確率密度の対数 \log(\pi(a|s)) を返す． 
+            本メソッドに関しても基本はexploitのように決定的にしてみてもよいかもしれない
+        """
+        if befor[0] is None:
+            print(state[0].shape)
+            befor[0] = torch.zeros_like(torch.tensor(state[0]))
+
         state = torch.tensor(state, dtype=torch.float, device=self.device).clone().detach().unsqueeze_(0)
+        befor = torch.tensor(befor, dtype=torch.float, device=self.device).clone().detach().unsqueeze_(0)
         # with torch.no_grad():
-        action_pos, log_pi_pos, action_sellect, log_pi_sellect, action_direct, log_pi_direct = self.actor.sample(state, goal, batch_size)
+        action_pos, log_pi_pos, action_sellect, log_pi_sellect, action_direct, log_pi_direct = self.actor.sample(befor, state, goal, batch_size)
 
 
         action_pos, action_sellect, action_direct = action_pos + abs(torch.min(action_pos.view(-1))) + 1e-3, action_sellect + abs(torch.min(action_sellect.view(-1)))+1e-3, action_direct + abs(torch.min(action_direct.view(-1)))+1e-3
@@ -561,34 +591,56 @@ class Algorithm(ABC):
 
         return action, log_pi
 
-    def exploit(self, state, goal):
+    def exploit(self, befor, state, goal, rand = False):
+        if befor is None:
+            befor = torch.zeros_like(torch.tensor(state))
+
         # print(f"state shape = ({len(state)}, {len(state[0])})")
         # print(f"goal shape = ({len(goal)}, {len(goal[0])})")
         state = torch.tensor(state, dtype=torch.float, device=self.device).unsqueeze_(0)
-        with torch.no_grad():
-            action_pos, action_sellect, action_direct = self.actor(state, goal)
-            action_pos, action_sellect, action_direct = action_pos + abs(torch.min(action_pos.view(-1))) + 1e-3, action_sellect + abs(torch.min(action_sellect.view(-1)))+1e-3, action_direct + abs(torch.min(action_direct.view(-1)))+1e-3
-            # action_pos = torch.argmax(action_pos.view(1,-1), dim=-1).cpu().numpy()
-            action_pos = random.choices(self.pos_list, k=1, weights=action_pos.view(-1).detach().cpu().numpy().tolist())[0]
+        befor = torch.tensor(befor, dtype=torch.float, device=self.device).unsqueeze_(0)
 
-            # print(f"state shape = ({len(state)}, {len(state[0])})")
-
-            # print(f"action_pos = {action_pos}")
-
-
-            action_pos_x = action_pos // len(state[0])
-            action_pos_y = action_pos % len(state[0][0])
-
-            print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
-
-            # action_sellect = torch.argmax(action_sellect, dim=-1).cpu().numpy()
-            action_sellect = random.choices(self.sellect_list, k=1, weights=action_sellect.view(-1).cpu().detach().numpy().tolist())[0]
-
-            # action_direct = torch.argmax(action_direct, dim=-1).cpu().numpy()
-            action_direct = random.choices(self.direct_list, k=1, weights=action_direct.view(-1).cpu().detach().numpy().tolist())[0]
+        if not random:
+            with torch.no_grad():
+                action_pos, action_sellect, action_direct = self.actor(befor, state, goal)
+                action_pos, action_sellect, action_direct = action_pos + abs(torch.min(action_pos.view(-1))) + 1e-3, action_sellect + abs(torch.min(action_sellect.view(-1)))+1e-3, action_direct + abs(torch.min(action_direct.view(-1)))+1e-3
+                action_pos = torch.argmax(action_pos.view(1,-1), dim=-1).cpu().numpy()
+                # print(f"action_pos = {action_pos}")
 
 
-            action = [int(action_pos_x), int(action_pos_y), int(action_sellect), int(action_direct)]
+                action_pos_x = action_pos // len(state[0])
+                action_pos_y = action_pos % len(state[0][0])
+
+                print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
+
+                action_sellect = torch.argmax(action_sellect, dim=-1).cpu().numpy()
+
+                action_direct = torch.argmax(action_direct, dim=-1).cpu().numpy()
+
+
+                action = [int(action_pos_x), int(action_pos_y), int(action_sellect), int(action_direct)]
+        else:
+            with torch.no_grad():
+                action_pos, action_sellect, action_direct = self.actor(befor, state, goal)
+                action_pos, action_sellect, action_direct = action_pos + abs(torch.min(action_pos.view(-1))) + 1e-3, action_sellect + abs(torch.min(action_sellect.view(-1)))+1e-3, action_direct + abs(torch.min(action_direct.view(-1)))+1e-3
+
+                action_pos = random.choices(self.pos_list, k=1, weights=action_pos.view(-1).detach().cpu().numpy().tolist())[0]
+
+                # print(f"action_pos = {action_pos}")
+
+
+                action_pos_x = action_pos // len(state[0])
+                action_pos_y = action_pos % len(state[0][0])
+
+                print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
+
+                action_sellect = random.choices(self.sellect_list, k=1, weights=action_sellect.view(-1).cpu().detach().numpy().tolist())[0]
+
+                action_direct = random.choices(self.direct_list, k=1, weights=action_direct.view(-1).cpu().detach().numpy().tolist())[0]
+
+
+                action = [int(action_pos_x), int(action_pos_y), int(action_sellect), int(action_direct)]
+
 
         return action
 
@@ -622,14 +674,15 @@ class TwoConvBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, out_channels):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, middle_channels, kernel_size = 3, padding="same")
-        # self.bn1 = nn.BatchNorm2d(middle_channels)
-        self.rl = nn.ReLU()
+        self.bn1 = nn.BatchNorm2d(middle_channels)
+        self.rl = nn.LeakyReLU()
+        # self.rl = nn.ReLU()
         self.conv2 = nn.Conv2d(middle_channels, out_channels, kernel_size = 3, padding="same")
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.conv1(x)
-        # x = self.bn1(x)
+        x = self.bn1(x)
         x = self.rl(x)
         x = self.conv2(x)
         x = self.bn2(x)
@@ -640,13 +693,13 @@ class UpConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-        # self.bn1 = nn.BatchNorm2d(in_channels)
+        self.bn1 = nn.BatchNorm2d(in_channels)
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size = 2, padding="same")
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.up(x)
-        # x = self.bn1(x)
+        x = self.bn1(x)
         x = self.conv(x)
         x = self.bn2(x)
         return x
@@ -664,7 +717,7 @@ class SACActor(nn.Module):
         Unetを使用してネットワークを一つだけに絞る
         """
 
-        self.TCB1 = TwoConvBlock(2, 16, 16)
+        self.TCB1 = TwoConvBlock(3, 16, 16)
         self.TCB2 = TwoConvBlock(16, 32, 32)
         self.TCB3 = TwoConvBlock(32, 64, 64)
         self.TCB4 = TwoConvBlock(64, 128, 128)
@@ -687,14 +740,23 @@ class SACActor(nn.Module):
 
         self.conv1 = nn.Conv2d(16, 2, kernel_size = 1)
 
-    def forward(self, states, goal, batch_size=1):
+    def forward(self, befor, states, goal, batch_size=1):
 
         start = time()
 
         state     = torch.tensor(states).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
         goal_copy = torch.tensor(goal).clone().detach().repeat(batch_size, 1, 1).to("cuda" if torch.cuda.is_available() else "cpu")
 
+        if befor is None:
+            befor = torch.zeros_like(states)
+
+        befor     = torch.tensor(befor).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
+
+
         #各配列を結合しやすいように形成する
+        
+        if befor.dim() > 3:
+          befor = befor.squeeze()
 
         if state.dim() > 3:
           state = state.squeeze()
@@ -702,9 +764,9 @@ class SACActor(nn.Module):
         if goal_copy.dim() > 3:
           goal_copy = goal_copy.squeeze()
 
-        state, goal_copy = state.unsqueeze(1), goal_copy.unsqueeze(1)
+        befor, state, goal_copy = befor.unsqueeze(1), state.unsqueeze(1), goal_copy.unsqueeze(1)
 
-        x = torch.cat([state, goal_copy], dim=1) #データを結合
+        x = torch.cat([befor, state, goal_copy], dim=1) #データを結合
 
         #データをネットワークに通す
         x = self.TCB1(x)
@@ -758,13 +820,21 @@ class SACActor(nn.Module):
         # print(f"action forward time : {end-start}")
         return return_pos, return_sellect, return_direct
 
-    def sample(self, states, goal, batch_size=1):
-
+    def sample(self, befor, states, goal, batch_size=1):
+        
         state     = torch.tensor(states).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
         goal_copy = torch.tensor(goal).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
 
+        if befor is None:
+            befor = torch.zeros_like(states)
+
+        befor     = torch.tensor(befor).clone().detach().to("cuda" if torch.cuda.is_available() else "cpu")
+
         if batch_size == 1:
           goal_copy = goal_copy.unsqueeze(0)
+
+        if befor.dim() > 3:
+          befor = befor.squeeze() 
 
         if state.dim() > 3:
           state = state.squeeze()
@@ -772,9 +842,9 @@ class SACActor(nn.Module):
         if goal_copy.dim() > 3:
           goal_copy = goal_copy.squeeze()
 
-        state, goal_copy = state.unsqueeze(1), goal_copy.unsqueeze(1)
+        befor, state, goal_copy = befor.unsqueeze(1), state.unsqueeze(1), goal_copy.unsqueeze(1)
 
-        x = torch.cat([state, goal_copy], dim=1)
+        x = torch.cat([befor, state, goal_copy], dim=1)
 
         x = self.TCB1(x)
         x1 = x
@@ -835,19 +905,19 @@ class SACCritic(nn.Module):
         self.TCB3 = TwoConvBlock(32, 64, 64)
         self.TCB4 = TwoConvBlock(64, 128, 128)
 
-        self.TCB7 = TwoConvBlock(128, 64, 64)
-        self.TCB8 = TwoConvBlock(64, 32, 32)
-        self.TCB9 = TwoConvBlock(32, 16, 16)
+        # self.TCB7 = TwoConvBlock(128, 64, 64)
+        # self.TCB8 = TwoConvBlock(64, 32, 32)
+        # self.TCB9 = TwoConvBlock(32, 16, 16)
         self.maxpool = nn.MaxPool2d(2, stride = 2)
 
         #self.UC1 = UpConv(256, 128)
-        self.UC2 = UpConv(128, 64)
-        self.UC3 = UpConv(64, 32)
-        self.UC4= UpConv(32, 16)
+        # self.UC2 = UpConv(128, 64)
+        # self.UC3 = UpConv(64, 32)
+        # self.UC4= UpConv(32, 16)
 
         self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.linear = nn.Linear(16, 2)
+        self.linear = nn.Linear(128, 2)
 
         #学習済みモデル使用用に書き換え
 
@@ -893,17 +963,17 @@ class SACCritic(nn.Module):
 
         x = self.TCB4(x)
 
-        x = self.UC2(x)
-        x = torch.cat([x3, x], dim = 1)
-        x = self.TCB7(x)
+        # x = self.UC2(x)
+        # x = torch.cat([x3, x], dim = 1)
+        # x = self.TCB7(x)
 
-        x = self.UC3(x)
-        x = torch.cat([x2, x], dim = 1)
-        x = self.TCB8(x)
+        # x = self.UC3(x)
+        # x = torch.cat([x2, x], dim = 1)
+        # x = self.TCB8(x)
 
-        x = self.UC4(x)
-        x = torch.cat([x1, x], dim = 1)
-        x = self.TCB9(x)
+        # x = self.UC4(x)
+        # x = torch.cat([x1, x], dim = 1)
+        # x = self.TCB9(x)
 
         x = self.gap(x).view(batch_size, -1)
 
@@ -947,8 +1017,7 @@ class ReplayBuffer:
 
     def sample(self, batch_size):
         # idxes = np.random.randint(low=0, high=self._n, size=batch_size)
-        idxes = np.arange(EPISODE_SIZE) + np.random.randint(low=0, high=self._n // EPISODE_SIZE, size=1) * 1000
-        print(f"sample indexes = {idxes}")
+        idxes = np.arange(batch_size) + np.random.randint(low=0, high=self._n // batch_size, size=1) * 1000
         return (
             self.states[idxes],
             self.actions[idxes],
@@ -1022,22 +1091,24 @@ class SAC(Algorithm):
         self.alpha = alpha
         self.reward_scale = reward_scale
 
+        self.actor_update = False
+
         self.pos_list     = list(range(state_shape[0]*state_shape[1]))
         self.sellect_list = list(range(num_of_cutter))
         self.direct_list  = list(range(4))
 
     def is_update(self, steps):
         # 学習初期の一定期間(start_steps)は学習しない．
-        return steps >= self.start_steps and steps % EPISODE_SIZE == 0
+        return steps >= self.batch_size and steps % self.batch_size == 0
 
-    def step(self, env, state, t, steps):
+    def step(self, env, befor, state, t, steps):
         t += 1
 
         # 学習初期の一定期間(start_steps)は，ランダムに行動して多様なデータの収集を促進する
         if steps <= self.start_steps:
             action = env.action_sample()
         else:
-            action, _ = self.explore(state, env.goal)
+            action, _ = self.explore(befor, state, env.goal)
         next_state, reward, done, _ = env.step(action)
 
 
@@ -1071,7 +1142,13 @@ class SAC(Algorithm):
         states, actions, rewards, dones, next_states, goal = self.buffer.sample(self.batch_size)
 
         self.update_critic(states, rewards, dones, next_states, goal, env)
-        self.update_actor(states, goal, env)
+
+        if self.actor_update:
+            self.update_actor(states, goal, env)
+            self.actor_update = False
+        else:
+            self.actor_update = True
+
         self.update_target()
 
         print("end update")
@@ -1080,8 +1157,10 @@ class SAC(Algorithm):
         curr_qs = self.critic(states, next_states, goal, batch_size = self.batch_size)
 
         # with torch.no_grad():
-        next_actions, log_pis = self.explore(next_states, goal, self.batch_size)
+        next_actions, log_pis = self.explore(states, next_states, goal, self.batch_size)
         curr_qs1, curr_qs2 = curr_qs.chunk(2, dim=-1)
+        curr_qs1 = torch.clamp(curr_qs1, min=-10**9, max=10**9)
+        curr_qs2 = torch.clamp(curr_qs2, min=-10**9, max=10**9) 
 
         """
         env.actionはいじらずにここでbatch対応させる。
@@ -1107,6 +1186,8 @@ class SAC(Algorithm):
 
 
         target_qs = rewards * self.reward_scale + (1.0 - dones) * self.gamma * next_qs
+
+        target_qs = torch.clamp(target_qs, min=-10**9, max=10**9) 
 
         loss_critic1 = (curr_qs1.mean() - target_qs).pow_(2).mean() / 10**3
         loss_critic2 = (curr_qs2.mean() - target_qs).pow_(2).mean() / 10**3
@@ -1134,7 +1215,10 @@ class SAC(Algorithm):
 
 
     def update_actor(self, states, goal, env):
-        actions, log_pis = self.explore(states, goal, self.batch_size)
+        befor_states = torch.zeros_like(states)
+        for i in range(len(states)-1):
+            befor_states[i+1] = states[i]
+        actions, log_pis = self.explore(befor_states, states, goal, self.batch_size)
         next_states = torch.empty((self.batch_size, states[0].shape[0], states[0].shape[1]), dtype=torch.float, device=self.device)
 
         act_start = time()

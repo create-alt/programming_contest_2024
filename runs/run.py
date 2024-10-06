@@ -10,6 +10,7 @@ from model import transition, SAC, Trainer
 
 SEED = 0
 random.seed(SEED)
+host_name = "http://localhost:8080"
 
 """
 #本番前にはここを実行可能にして下の自作部分を隠す
@@ -19,7 +20,7 @@ headers = {
 }
 
 # GET リクエストを送信
-response = requests.get("http://localhost:8080/problem", headers=headers)
+response = requests.get(host_name + "/problem", headers=headers)
 
 # レスポンスのステータスコードを確認
 if response.status_code == 200:
@@ -48,7 +49,6 @@ for i in range(H):
         goal_train = int(goal[i][j])
         goal_test  = int(goal[i][j])
 
-"""
 
 #定型抜き型を作成
 cutter = [[[1]]]
@@ -97,7 +97,7 @@ for _ in range(data["general"]["n"]):
         grid.append([])
         for j in range(cut_info["width"]):
             grid[i].append(int(cut_info["cells"][i][j]))
-
+"""
 
 
 
@@ -110,6 +110,44 @@ for _ in range(data["general"]["n"]):
 boardやcutterの作成
 本来はjsonファイルの入力を受け取るが、プログラムのテスト用に直接作成
 """
+
+#定型抜き型を作成
+cutter = [[[1]]]
+
+for size in [2, 4, 8, 16, 32, 64, 128, 256]:
+    grid = []
+    #すべてが1の抜き型
+    for i in range(size):
+        grid.append([])
+        for j in range(size):
+            grid[i].append(1)
+
+    cutter.append(grid)
+
+    grid = []
+    #1マスおきに列が1の抜き型
+    for i in range(size):
+        grid.append([])
+        for j in range(size):
+            if j%2 == 0:
+                grid[i].append(1)
+            else:
+                grid[i].append(0)
+
+    cutter.append(grid)
+
+    grid = []
+    #1マスおきに行が1の抜き型
+    for i in range(size):
+        grid.append([])
+        for j in range(size):
+            if i%2 == 0:
+                grid[i].append(1)
+            else:
+                grid[i].append(0)
+
+    cutter.append(grid)
+
 board_train = []
 
 board_size = 32
@@ -144,37 +182,37 @@ print(count)
 """
 boardを可視化
 """
-# 0~3の値に対応する色を定義
-cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
+# # 0~3の値に対応する色を定義
+# cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
 
-# 図を描画
-plt.imshow(board_test, cmap=cmap, interpolation='none')
+# # 図を描画
+# plt.imshow(board_test, cmap=cmap, interpolation='none')
 
-# カラーバーを表示して、各色が何の値に対応するかを表示
-cbar = plt.colorbar(ticks=[0, 1, 2, 3])
-cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
+# # カラーバーを表示して、各色が何の値に対応するかを表示
+# cbar = plt.colorbar(ticks=[0, 1, 2, 3])
+# cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
 
-# グリッド線を追加
-plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
+# # グリッド線を追加
+# plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
 
-# 図を表示
-plt.show()
+# # 図を表示
+# plt.show()
 
-# 0~3の値に対応する色を定義
-cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
+# # 0~3の値に対応する色を定義
+# cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
 
-# 図を描画
-plt.imshow(goal_test, cmap=cmap, interpolation='none')
+# # 図を描画
+# plt.imshow(goal_test, cmap=cmap, interpolation='none')
 
-# カラーバーを表示して、各色が何の値に対応するかを表示
-cbar = plt.colorbar(ticks=[0, 1, 2, 3])
-cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
+# # カラーバーを表示して、各色が何の値に対応するかを表示
+# cbar = plt.colorbar(ticks=[0, 1, 2, 3])
+# cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
 
-# グリッド線を追加
-plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
+# # グリッド線を追加
+# plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
 
-# 図を表示
-plt.show()
+# # 図を表示
+# plt.show()
 
 """### 学習の開始"""
 
@@ -188,8 +226,8 @@ BATCH_SIZE = 1000
 EVAL_INTERVAL = BATCH_SIZE * 10
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
-env = transition(board_train, cutter, goal_train)
-env_test = transition(board_test, cutter, goal_test, test = True)
+env = transition(board_train, cutter, goal_train, EPISODE_SIZE=BATCH_SIZE)
+env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=BATCH_SIZE)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -201,12 +239,12 @@ algo = SAC(
     seed=SEED,
     reward_scale=REWARD_SCALE,
     batch_size=BATCH_SIZE,
-    lr_actor=3e-3,
+    lr_actor=3e-4,
     lr_critic=3e-3,
-    replay_size=10**5,
-    start_steps=1000,
+    replay_size=10**3,
+    start_steps=BATCH_SIZE,
     # pretrain = True,
-    # model_weight_name = 'model_best'
+    # model_weight_name = 'model_0.40625'
 )
 
 trainer = Trainer(
