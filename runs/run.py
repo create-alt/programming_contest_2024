@@ -1,3 +1,7 @@
+"""
+実行時にはカレントディレクトリをrunsにしてから実行してください！重みが保存できなくなります。
+"""
+
 import torch
 import random
 import matplotlib.pyplot as plt
@@ -227,7 +231,7 @@ EVAL_INTERVAL = BATCH_SIZE * 10
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
 env = transition(board_train, cutter, goal_train, EPISODE_SIZE=BATCH_SIZE)
-env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=BATCH_SIZE)
+env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=BATCH_SIZE/2)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
