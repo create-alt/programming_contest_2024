@@ -318,7 +318,8 @@ class transition():
 
         self.before_rew = this_rew
 
-        print(f"{self.num_step} this_rew : {this_rew}")
+        if self.num_step % 100 == 0:
+            print(f"{self.num_step} this_rew : {this_rew}")
 
         if self.test and num_eq > self.max_eq:
           self.max_rew = this_rew
@@ -415,7 +416,8 @@ class Trainer:
             # アルゴリズムに渡し，状態・エピソードのステップ数を更新する．
             state, t = self.algo.step(self.env, self.befor_state, state, t, steps)
             self.befor_state = copy.deepcopy(state)
-            print(steps)
+            if steps % 1000 == 0:
+                print(steps)
 
             # アルゴリズムが準備できていれば，1回学習を行う．
             if self.algo.is_update(steps):
@@ -713,6 +715,8 @@ class SACActor(nn.Module):
     def __init__(self, num_of_cutter):
         super().__init__()
 
+        self.num_of_cutter = num_of_cutter
+
         """
         Unetを使用してネットワークを一つだけに絞る
         """
@@ -723,7 +727,7 @@ class SACActor(nn.Module):
         self.TCB4 = TwoConvBlock(64, 128, 128)
         # self.TCB5 = TwoConvBlock(128, 256, 256)
 
-        self.linear_sellect = nn.Linear(128, 2 * num_of_cutter)
+        self.linear_sellect = nn.Linear(128, 2 * 100)
         self.linear_direction = nn.Linear(128, 2 * 4)
 
         # self.TCB6 = TwoConvBlock(256, 128, 128)
@@ -791,7 +795,8 @@ class SACActor(nn.Module):
         x_sellect = self.linear_sellect(x_sellect_direction).chunk(2, dim=-1)[0]
         x_direction = self.linear_direction(x_sellect_direction).chunk(2, dim=-1)[0]
 
-        return_sellect = torch.tanh(x_sellect)
+        return_sellect = torch.tanh(x_sellect)[0][0:self.num_of_cutter].unsqueeze_(0)
+
         return_direct = torch.tanh(x_direction)
 
         # x = self.UC1(x)
@@ -866,6 +871,7 @@ class SACActor(nn.Module):
 
         x_sellect_direction = self.gap(x).view(batch_size, -1)
         means_sellect, log_stds_sellect = self.linear_sellect(x_sellect_direction).chunk(2, dim=-1)
+        means_sellect, log_stds_sellect = means_sellect[:, 0:self.num_of_cutter], log_stds_sellect[:, 0:self.num_of_cutter]
         means_direct, log_stds_direct = self.linear_direction(x_sellect_direction).chunk(2, dim=-1)
 
         # x = self.UC1(x)
@@ -1091,7 +1097,7 @@ class SAC(Algorithm):
         self.alpha = alpha
         self.reward_scale = reward_scale
 
-        self.actor_update = False
+        self.actor_update_count = 0
 
         self.pos_list     = list(range(state_shape[0]*state_shape[1]))
         self.sellect_list = list(range(num_of_cutter))
@@ -1143,11 +1149,11 @@ class SAC(Algorithm):
 
         self.update_critic(states, rewards, dones, next_states, goal, env)
 
-        if self.actor_update:
+        if self.actor_update_count == 9:
             self.update_actor(states, goal, env)
-            self.actor_update = False
+            self.actor_update_count = 0
         else:
-            self.actor_update = True
+            self.actor_update_count += 1
 
         self.update_target()
 
@@ -1167,14 +1173,12 @@ class SAC(Algorithm):
         networkについてはbatch対応させる（これに関しては計算効率向上）
         """
         #tensorで初期化しないとエラーの原因になる
-        after_next_actions = torch.empty((self.batch_size, next_states[0].shape[0], next_states[0].shape[1]), dtype=torch.float, device=self.device)
+        # after_next_actions = torch.empty((self.batch_size, next_states[0].shape[0], next_states[0].shape[1]), dtype=torch.float, device=self.device)
 
         act_start = time()
-        for i in range(self.batch_size):
-          if i == self.batch_size - 1:
-              after_next_actions[i] = env.action(next_states[i], [next_actions[i][0], next_actions[i][1]], env.cutter[next_actions[i][2]], next_actions[i][3])
-              break
-          after_next_actions[i] = next_states[i+1]
+
+        after_next_actions_last = env.action(next_states[self.batch_size - 1], [next_actions[self.batch_size-1][0], next_actions[self.batch_size-1][1]], env.cutter[next_actions[self.batch_size-1][2]], next_actions[self.batch_size-1][3])
+        after_next_actions      = torch.cat([next_states[1:self.batch_size], after_next_actions_last.unsqueeze_(0)], dim=0)
 
         act_end = time()
         print(f"act time is {act_end - act_start}")
@@ -1219,15 +1223,18 @@ class SAC(Algorithm):
         for i in range(len(states)-1):
             befor_states[i+1] = states[i]
         actions, log_pis = self.explore(befor_states, states, goal, self.batch_size)
-        next_states = torch.empty((self.batch_size, states[0].shape[0], states[0].shape[1]), dtype=torch.float, device=self.device)
+        # next_states = torch.empty((self.batch_size, states[0].shape[0], states[0].shape[1]), dtype=torch.float, device=self.device)
 
         act_start = time()
 
-        for i in range(self.batch_size):
-            if i == self.batch_size - 1:
-              next_states[i] = env.action(states[i], [actions[i][0], actions[i][1]], env.cutter[actions[i][2]], actions[i][3])
-              break
-            next_states[i] = states[i+1]
+        after_actions_last = env.action(states[self.batch_size - 1], [actions[self.batch_size-1][0], actions[self.batch_size-1][1]], env.cutter[actions[self.batch_size-1][2]], actions[self.batch_size-1][3])
+        next_states      = torch.cat([states[1:self.batch_size], after_actions_last.unsqueeze_(0)], dim=0)
+
+        # for i in range(self.batch_size):
+        #     if i == self.batch_size - 1:
+        #       next_states[i] = env.action(states[i], [actions[i][0], actions[i][1]], env.cutter[actions[i][2]], actions[i][3])
+        #       break
+        #     next_states[i] = states[i+1]
 
         act_end = time()
         print(f"act time is {act_end - act_start}")
