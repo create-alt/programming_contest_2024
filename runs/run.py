@@ -154,7 +154,7 @@ for size in [2, 4, 8, 16, 32, 64, 128, 256]:
 
 board_train = []
 
-board_size = 32
+board_size = 64
 
 for i in range(board_size):
   board_train.append([])
@@ -226,12 +226,12 @@ boardを可視化
 SEED = 0
 REWARD_SCALE = 0.99
 NUM_STEPS = 5 * 10 ** 4
-BATCH_SIZE = 1000
+BATCH_SIZE = 200
 EVAL_INTERVAL = BATCH_SIZE * 10
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
 env = transition(board_train, cutter, goal_train, EPISODE_SIZE=BATCH_SIZE)
-env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=BATCH_SIZE/2)
+env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=BATCH_SIZE)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -243,8 +243,8 @@ algo = SAC(
     seed=SEED,
     reward_scale=REWARD_SCALE,
     batch_size=BATCH_SIZE,
-    lr_actor=3e-4,
-    lr_critic=3e-3,
+    lr_actor=1e-2,
+    lr_critic=1e-2,
     replay_size=10**3,
     start_steps=BATCH_SIZE,
     # pretrain = True,
