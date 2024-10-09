@@ -10,7 +10,8 @@ import copy
 import json
 import requests
 
-from model import transition, SAC, Trainer 
+from model import SAC, Trainer 
+from Env import transition
 
 SEED = 0
 random.seed(SEED)
@@ -226,7 +227,7 @@ boardを可視化
 SEED = 0
 REWARD_SCALE = 0.99
 NUM_STEPS = 5 * 10 ** 4
-BATCH_SIZE = 200
+BATCH_SIZE = 400
 EVAL_INTERVAL = BATCH_SIZE * 10
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
