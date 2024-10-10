@@ -12,6 +12,7 @@ import requests
 
 from model import SAC, Trainer 
 from Env import transition
+from create_board import create_train_board
 
 SEED = 0
 random.seed(SEED)
@@ -116,68 +117,18 @@ boardやcutterの作成
 本来はjsonファイルの入力を受け取るが、プログラムのテスト用に直接作成
 """
 
-#定型抜き型を作成
-cutter = [[[1]]]
-
-for size in [2, 4, 8, 16, 32, 64, 128, 256]:
-    grid = []
-    #すべてが1の抜き型
-    for i in range(size):
-        grid.append([])
-        for j in range(size):
-            grid[i].append(1)
-
-    cutter.append(grid)
-
-    grid = []
-    #1マスおきに列が1の抜き型
-    for i in range(size):
-        grid.append([])
-        for j in range(size):
-            if j%2 == 0:
-                grid[i].append(1)
-            else:
-                grid[i].append(0)
-
-    cutter.append(grid)
-
-    grid = []
-    #1マスおきに行が1の抜き型
-    for i in range(size):
-        grid.append([])
-        for j in range(size):
-            if i%2 == 0:
-                grid[i].append(1)
-            else:
-                grid[i].append(0)
-
-    cutter.append(grid)
-
-board_train = []
-
-board_size = 64
-
-for i in range(board_size):
-  board_train.append([])
-  for j in range(board_size):
-      board_train[i].append(random.randint(0,3))
-
-# goal_train = []
-
-# for i in range(32):
-#   goal_train.append([])
-#   for j in range(32):
-#       goal_train[i].append(random.randint(0,3))
-
-goal_train = copy.deepcopy(board_train)
-random.shuffle(goal_train)
+board_train, goal_train, cutter = create_train_board(seed=0, 
+                                                     board_shape=[32,32],
+                                                     cutter_add_num=0,
+                                                     num_of_shuffle=25, #最短何手でgoalにたどり着くのかを指定
+                                                    )
 
 board_test = copy.deepcopy(board_train)
 goal_test = copy.deepcopy(goal_train)
 
 count = 0
-for i in range(board_size):
-  for j in range(board_size):
+for i in range(len(board_train)):
+  for j in range(len(board_train[0])):
     if(board_test[i][j] == goal_test[i][j]):
       count+=1
 
@@ -185,39 +136,42 @@ print(count)
 
 
 """
-boardを可視化
+#boardを可視化
+
+# 0~3の値に対応する色を定義
+cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
+
+# 図を描画
+plt.imshow(board_test, cmap=cmap, interpolation='none')
+
+# カラーバーを表示して、各色が何の値に対応するかを表示
+cbar = plt.colorbar(ticks=[0, 1, 2, 3])
+cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
+
+# グリッド線を追加
+plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
+
+# 図を表示
+plt.show()
+
+# 0~3の値に対応する色を定義
+cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
+
+# 図を描画
+plt.imshow(goal_test, cmap=cmap, interpolation='none')
+
+# カラーバーを表示して、各色が何の値に対応するかを表示
+cbar = plt.colorbar(ticks=[0, 1, 2, 3])
+cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
+
+# グリッド線を追加
+plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
+
+# 図を表示
+plt.show()
+
 """
-# # 0~3の値に対応する色を定義
-# cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
 
-# # 図を描画
-# plt.imshow(board_test, cmap=cmap, interpolation='none')
-
-# # カラーバーを表示して、各色が何の値に対応するかを表示
-# cbar = plt.colorbar(ticks=[0, 1, 2, 3])
-# cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
-
-# # グリッド線を追加
-# plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
-
-# # 図を表示
-# plt.show()
-
-# # 0~3の値に対応する色を定義
-# cmap = ListedColormap(['red', 'green', 'blue', 'yellow'])
-
-# # 図を描画
-# plt.imshow(goal_test, cmap=cmap, interpolation='none')
-
-# # カラーバーを表示して、各色が何の値に対応するかを表示
-# cbar = plt.colorbar(ticks=[0, 1, 2, 3])
-# cbar.ax.set_yticklabels(['0', '1', '2', '3'])  # ラベルを設定
-
-# # グリッド線を追加
-# plt.grid(False)  # グリッドを非表示にする場合はTrueをFalseに変更
-
-# # 図を表示
-# plt.show()
 
 """### 学習の開始"""
 
