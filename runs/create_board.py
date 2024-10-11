@@ -37,125 +37,251 @@ import random
 import numpy as np
 import copy
 
-def create_train_board(seed=0, board_shape=[32,32], cutter_add_num = 0, num_of_shuffle=5):
-    random.seed(seed)
+def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_shuffle=5):
+  random.seed(seed)
 
-    goal_board = []
+  goal_board = []
 
-    for i in range(board_shape[0]):
-        goal_board.append([])
-        
-        for j in range(board_shape[1]):
-            goal_board[i].append(random.randint(0,3))
+  for i in range(board_shape[0]):
+    goal_board.append([])
 
-    cutter = create_cutter(cutter_add_num)
+    for j in range(board_shape[1]):
+      goal_board[i].append(random.randint(0, 3))
 
-    start_board = copy.deepcopy(goal_board)
+  cutter = create_cutter(cutter_add_num)
 
-    """
+  start_board = copy.deepcopy(goal_board)
+
+  """
     以下でactionをもとにしたstart_boardの成形を行う
     """
-    for i in range(num_of_shuffle):
-        X, Y = random.randint(0, board_shape[0] - 1), random.randint(0, board_shape[1] - 1)
-        use_cutter = cutter[random.randint(0, len(cutter) - 1)]
-        direct = random.randint(0, 3)
+  for i in range(num_of_shuffle):
+    X, Y = random.randint(
+        0, board_shape[0] - 1), random.randint(0, board_shape[1] - 1)
+    use_cutter = cutter[random.randint(0, len(cutter) - 1)]
+    direct = random.randint(0, 3)
 
-        cutter_one_nums = []
-        cut_numbers     = []
+    cutter_one_nums = []
+    cut_numbers = []
 
-        if direct in [0, 1]:
-            #上下方向に動く場合にcutterの列ごとの1の枚数を調べる
-            for i in range(len(use_cutter)):
-                count=0
-                for j in range(len(use_cutter[0])):
-                    if use_cutter[j][i] == 1:
-                        count += 1
+    if direct in [0, 1]:
+      # 上下方向に動く場合にcutterの列ごとの1の枚数を調べる
+      for i in range(len(use_cutter)):
+        count = 0
+        for j in range(len(use_cutter[0])):
+          if use_cutter[j][i] == 1:
+            count += 1
 
-                    cutter_one_nums.append(count)
+        cutter_one_nums.append(count)
 
-            if direct == 0:
-                #上方向へ移動
-                #->下側のピースを選択して間に入れ込む
+      if direct == 0:
+        # 上方向へ移動
+        # ->下側のピースを選択して間に入れ込む
 
-                """
-                抜いた最後尾のピース群(A)とX,Yから最後尾に向かう方向のピース群(B)をそれぞれ順番にリストに格納して、
-                X,Yにcutterを適応したとき1ならAからその列の値をstart_boardに代入し、0ならBから代入する。
-                dequeとか使用すると実装が楽かも
-                """
+        """
+        抜いた最後尾のピース群(A)とX,Yから最後尾に向かう方向のピース群(B)をそれぞれ順番にリストに格納して、
+        X,Yにcutterを適応したとき1ならAからその列の値をstart_boardに代入し、0ならBから代入する。
+        dequeとか使用すると実装が楽かも
+        """
+        cut_pieces = []
+        for i in range(len(use_cutter[0])):
+          cut_pieces.append([])
+          for j in range(len(cutter_one_nums[i])):
+            # 抜き取るピース（抜き取った結果移動してきたピース）を取得し、その箇所のピースを穴あきとする
+            cut_pieces.append(start_board[board_shape[0] - j - 1][i])
+            start_board[board_shape[0] - j - 1][i] = -1
 
-                for i in range(len(use_cutter)):
-                    for j in range(len(cutter_one_nums[i])):
-                        if start_board[board_shape[0] - j - 1][i] == 1:
-                            count += 1
+        # 切り取られず残るピースを保存（cut_piecesを間に埋め込むので一時保存）
+        rem_pieces = []
+        for i in range(len(use_cutter[0])):
+          rem_pieces.append([])
+
+          for none_num in cutter_one_nums[i]:
+
+            for j in range(X, board_shape[0] - none_num):
+              rem_pieces[i].append(start_board[j][i])
+
+        for i in range(len(use_cutter[0])):
+          cut_piece_counter = 0
+          rem_piece_counter = 0
+          for j in range(X, board_shape[0]):
+
+            cutter_index = j - X
+            if len(use_cutter) > cutter_index and use_cutter[j][i] == 1:
+              start_board[j][i] = cut_pieces[i][cut_piece_counter]
+              cut_piece_counter += 1
 
             else:
-                #下方向へ移動
+              start_board[j][j] = rem_pieces[i][rem_piece_counter]
+              rem_piece_counter += 1
 
-        else:
-            #左右方向に動く場合にcutterの行ごとの1の枚数を調べる
-            for i in range(len(use_cutter)):
-                count=0
-                for j in range(len(use_cutter[0])):
-                    if use_cutter[i][j] == 1:
-                        count += 1
+      else:
+        # 下方向へ移動
 
-            cutter_one_nums.append(count)
+        cut_pieces = []
+        for i in range(len(use_cutter[0])):
+          cut_pieces.append([])
+          for j in range(len(cutter_one_nums[i]) - 1, 0, -1):
+            # 抜き取るピース（抜き取った結果移動してきたピース）を取得し、その箇所のピースを穴あきとする
+            cut_pieces.append(start_board[j][i])
+            start_board[j][i] = -1
 
-            if direct == 2:
-                #左方向へ移動
+        # 切り取られず残るピースを保存（cut_piecesを間に埋め込むので一時保存）
+        rem_pieces = []
+        for i in range(len(use_cutter[0])):
+          rem_pieces.append([])
+
+          for none_num in cutter_one_nums[i]:
+
+            for j in range(X + len(use_cutter) - 1, none_num, -1):
+              rem_pieces[i].append(start_board[j][i])
+
+        for i in range(len(use_cutter[0])):
+          cut_piece_counter = 0
+          rem_piece_counter = 0
+          for j in range(X + len(use_cutter) - 1, 0, -1):
+
+            cutter_index = j - X
+            if cutter_index >= 0 and use_cutter[j][i] == 1:
+              start_board[j][i] = cut_pieces[i][cut_piece_counter]
+              cut_piece_counter += 1
 
             else:
-                #右方向へ移動
+              start_board[j][j] = rem_pieces[i][rem_piece_counter]
+              rem_piece_counter += 1
 
+    # 下記は未完成なので編集必須
 
+    else:
+      # 左右方向に動く場合にcutterの行ごとの1の枚数を調べる
+      for i in range(len(use_cutter)):
+        count = 0
+        for j in range(len(use_cutter[0])):
+          if use_cutter[i][j] == 1:
+            count += 1
 
+        cutter_one_nums.append(count)
 
+      if direct == 2:
+        # 左方向へ移動
+        # ->下側のピースを選択して間に入れ込む
 
+        """
+        抜いた最後尾のピース群(A)とX,Yから最後尾に向かう方向のピース群(B)をそれぞれ順番にリストに格納して、
+        X,Yにcutterを適応したとき1ならAからその列の値をstart_boardに代入し、0ならBから代入する。
+        dequeとか使用すると実装が楽かも
+        """
+        cut_pieces = []
+        for i in range(len(use_cutter)):
+          cut_pieces.append([])
+          for j in range(len(cutter_one_nums[i])):
+            # 抜き取るピース（抜き取った結果移動してきたピース）を取得し、その箇所のピースを穴あきとする
+            cut_pieces.append(start_board[i][board_shape[1] - j - 1])
+            start_board[i][board_shape[0] - j - 1] = -1
 
-    return start_board, goal_board
+        # 切り取られず残るピースを保存（cut_piecesを間に埋め込むので一時保存）
+        rem_pieces = []
+        for i in range(len(use_cutter[0])):
+          rem_pieces.append([])
+
+          for none_num in cutter_one_nums[i]:
+
+            for j in range(Y, board_shape[0] - none_num):
+              rem_pieces[i].append(start_board[j][i])
+
+        for i in range(len(use_cutter[0])):
+          cut_piece_counter = 0
+          rem_piece_counter = 0
+          for j in range(Y, board_shape[0]):
+
+            cutter_index = j - Y
+            if len(use_cutter) > cutter_index and use_cutter[j][i] == 1:
+              start_board[j][i] = cut_pieces[i][cut_piece_counter]
+              cut_piece_counter += 1
+
+            else:
+              start_board[j][j] = rem_pieces[i][rem_piece_counter]
+              rem_piece_counter += 1
+
+      else:
+        # 右方向へ移動
+
+        cut_pieces = []
+        for i in range(len(use_cutter[0])):
+          cut_pieces.append([])
+          for j in range(len(cutter_one_nums[i]) - 1, 0, -1):
+            # 抜き取るピース（抜き取った結果移動してきたピース）を取得し、その箇所のピースを穴あきとする
+            cut_pieces.append(start_board[j][i])
+            start_board[j][i] = -1
+
+        # 切り取られず残るピースを保存（cut_piecesを間に埋め込むので一時保存）
+        rem_pieces = []
+        for i in range(len(use_cutter[0])):
+          rem_pieces.append([])
+
+          for none_num in cutter_one_nums[i]:
+
+            for j in range(Y + len(use_cutter) - 1, none_num, -1):
+              rem_pieces[i].append(start_board[j][i])
+
+        for i in range(len(use_cutter[0])):
+          cut_piece_counter = 0
+          rem_piece_counter = 0
+          for j in range(Y + len(use_cutter) - 1, 0, -1):
+
+            cutter_index = j - Y
+            if cutter_index >= 0 and use_cutter[j][i] == 1:
+              start_board[j][i] = cut_pieces[i][cut_piece_counter]
+              cut_piece_counter += 1
+
+            else:
+              start_board[j][j] = rem_pieces[i][rem_piece_counter]
+              rem_piece_counter += 1
+
+  return start_board, goal_board
 
 def create_cutter(add_num=0):
-    #定型抜き型を作成
-    cutter = [[[1]]]
+  # 定型抜き型を作成
+  cutter = [[[1]]]
 
-    for size in [2, 4, 8, 16, 32, 64, 128, 256]:
-        grid = []
-        #すべてが1の抜き型
-        for i in range(size):
-            grid.append([])
-            for j in range(size):
-                grid[i].append(1)
+  for size in [2, 4, 8, 16, 32, 64, 128, 256]:
+    grid = []
+    # すべてが1の抜き型
+    for i in range(size):
+      grid.append([])
+      for j in range(size):
+        grid[i].append(1)
 
-        cutter.append(grid)
+    cutter.append(grid)
 
-        grid = []
-        #1マスおきに列が1の抜き型
-        for i in range(size):
-            grid.append([])
-            for j in range(size):
-                if j%2 == 0:
-                    grid[i].append(1)
-                else:
-                    grid[i].append(0)
+    grid = []
+    # 1マスおきに列が1の抜き型
+    for i in range(size):
+      grid.append([])
+      for j in range(size):
+        if j % 2 == 0:
+          grid[i].append(1)
+        else:
+          grid[i].append(0)
 
-        cutter.append(grid)
+    cutter.append(grid)
 
-        grid = []
-        #1マスおきに行が1の抜き型
-        for i in range(size):
-            grid.append([])
-            for j in range(size):
-                if i%2 == 0:
-                    grid[i].append(1)
-                else:
-                    grid[i].append(0)
+    grid = []
+    # 1マスおきに行が1の抜き型
+    for i in range(size):
+      grid.append([])
+      for j in range(size):
+        if i % 2 == 0:
+          grid[i].append(1)
+        else:
+          grid[i].append(0)
 
-        cutter.append(grid)
+    cutter.append(grid)
 
-    if add_num != 0:
-        """
-        add_num(追加のcutter数)に応じてrandomでcutterを作成する
-        """
-        pass
+  if add_num != 0:
+    """
+    add_num(追加のcutter数)に応じてrandomでcutterを作成する
+    """
+    pass
 
-    return cutter
+  return cutter
