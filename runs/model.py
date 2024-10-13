@@ -55,6 +55,8 @@ class Trainer:
 
         self.befor_state = None
 
+        self.max_rew_data = None
+
     def train(self):
         """ num_stepsステップの間，データ収集・学習・評価を繰り返す． """
 
@@ -82,8 +84,11 @@ class Trainer:
                  self.algo.update(self.env)
 
             # 一定のインターバルで評価する．
-            if steps % self.eval_interval == 0 and steps >= self.algo.start_steps:
+            if (steps % self.eval_interval == 0 and steps >= self.algo.start_steps) or steps == self.num_steps:
                 self.evaluate(steps)
+                # self.env.start = copy.deepcopy(self.env_test.board)
+                # self.env.board = copy.deepcopy(self.env_test.board)
+                # self.befor_state = copy.deepcopy(self.env_test.board)
 
                 if self.max_eq < self.env_test.max_eq:
                   self.max_eq = self.env_test.max_eq
@@ -142,35 +147,37 @@ class Trainer:
 
         #ひとつ前の結果より良くなったらファイルを保存
         if self.env_test.save_file_name is not None:
-            json_name = f"./solution_{self.env_test.save_file_name}.json"
-            
-            with open(json_name, 'w') as f:
-                json.dump(output, f, indent=2)
+            if self.max_rew_data is None or self.max_rew_data < self.env_test.save_file_name:
 
-            self.env.start, self.env.board = self.env_test.ans_board, self.env_test.ans_board
-            
-            #2回目以降のファイル保存ならば、ファイルを結合してより良い結果に
-            if self.env_test.before_file_name is not None:
-                before_json_name = f"./solution_{self.env_test.before_file_name}.json"
-                save_data = concat_jsonfile(before_json_name, json_name)
-
+                json_name = f"./solution_{self.env_test.save_file_name}.json"
+                
                 with open(json_name, 'w') as f:
-                    json.dump(save_data, f, indent=2)
+                    json.dump(output, f, indent=2)
 
-        """
-            # solution.json を読み込む
-            with open(json_name, 'r') as f:
-                solution_data = json.load(f)
+                # self.env.start, self.env.board = self.env_test.ans_board, self.env_test.ans_board
+                
+                #2回目以降のファイル保存ならば、ファイルを結合してより良い結果に
+                if self.env_test.before_file_name is not None:
+                    before_json_name = f"./solution_{self.env_test.before_file_name}.json"
+                    save_data = concat_jsonfile(before_json_name, json_name)
 
-            # ヘッダーの設定
-            headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+                    with open(json_name, 'w') as f:
+                        json.dump(save_data, f, indent=2)
 
-            # POST リクエストを送信
-            response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
+            """
+                # solution.json を読み込む
+                with open(json_name, 'r') as f:
+                    solution_data = json.load(f)
 
-            # レスポンスのステータスコードと内容を確認
-            print("Status Code:", response.status_code)
-        """
+                # ヘッダーの設定
+                headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+
+                # POST リクエストを送信
+                response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
+
+                # レスポンスのステータスコードと内容を確認
+                print("Status Code:", response.status_code)
+            """
 
     def plot_return(self):
         """ 平均収益のグラフを描画する． """
@@ -418,6 +425,29 @@ class SACActor(nn.Module):
 
         state = torch.cat([befor, state, goal], dim=1) #データを結合
 
+        if state.shape[2] not in [32, 64, 128, 256]:
+
+            if state.shape[2] < 64:
+                zero = torch.zeros(state.shape[0], state.shape[1], 64 - state.shape[2], state.shape[3]).to("cuda")
+            elif state.shape[2] < 128:
+                zero = torch.zeros(state.shape[0], state.shape[1], 128 - state.shape[2], state.shape[3]).to("cuda")
+            elif state.shape[2] < 256:
+                zero = torch.zeros(state.shape[0], state.shape[1], 256 - state.shape[2], state.shape[3]).to("cuda")
+
+            state = torch.cat([state, zero], dim=2)
+
+        if state.shape[3] not in [32, 64, 128, 256]:
+
+            if state.shape[3] < 64:
+                zero = torch.zeros(state.shape[0], state.shape[1], state.shape[2], 64-state.shape[3]).to("cuda")
+            elif state.shape[3] < 128:
+                zero = torch.zeros(state.shape[0], state.shape[1], state.shape[2], 128-state.shape[3]).to("cuda")
+            elif state.shape[3] < 256:
+                zero = torch.zeros(state.shape[0], state.shape[1], state.shape[2], 256-state.shape[3]).to("cuda")
+
+            state = torch.cat([state, zero], dim=3)
+            
+
         #データをネットワークに通す
         state = self.TCB1(state)
         x1 = state
@@ -454,8 +484,9 @@ class SACActor(nn.Module):
         state = self.TCB9(state)
 
         state = self.conv1(state)
+        state = state[:, :, 0:befor.shape[-2], 0:befor.shape[-1]]
 
-        return_pos = torch.tanh(state.chunk(2, dim=1)[0].view(batch_size, -1))
+        return_pos = torch.tanh(state.chunk(2, dim=1)[0].reshape(batch_size, befor.shape[-2] * befor.shape[-1]))
 
         return return_pos, return_sellect, return_direct
 
@@ -473,6 +504,28 @@ class SACActor(nn.Module):
         befor, state, goal = befor.unsqueeze(1), state.unsqueeze(1), goal.unsqueeze(1)
 
         state = torch.cat([befor, state, goal], dim=1)
+
+        if state.shape[2] not in [32, 64, 128, 256]:
+
+            if state.shape[2] < 64:
+                zero = torch.zeros(state.shape[0], state.shape[1], 64 - state.shape[2], state.shape[3]).to("cuda")
+            elif state.shape[2] < 128:
+                zero = torch.zeros(state.shape[0], state.shape[1], 128 - state.shape[2], state.shape[3]).to("cuda")
+            elif state.shape[2] < 256:
+                zero = torch.zeros(state.shape[0], state.shape[1], 256 - state.shape[2], state.shape[3]).to("cuda")
+
+            state = torch.cat([state, zero], dim=2)
+
+        if state.shape[3] not in [32, 64, 128, 256]:
+
+            if state.shape[3] < 64:
+                zero = torch.zeros(state.shape[0], state.shape[1], state.shape[2], 64-state.shape[3]).to("cuda")
+            elif state.shape[3] < 128:
+                zero = torch.zeros(state.shape[0], state.shape[1], state.shape[2], 128-state.shape[3]).to("cuda")
+            elif state.shape[3] < 256:
+                zero = torch.zeros(state.shape[0], state.shape[1], state.shape[2], 256-state.shape[3]).to("cuda")
+
+            state = torch.cat([state, zero], dim=3)
 
         state = self.TCB1(state)
         x1 = state
@@ -509,7 +562,10 @@ class SACActor(nn.Module):
 
         state = self.conv1(state)
 
-        means_pos, log_stds_pos = state.view(batch_size, -1).chunk(2, dim=-1)
+        state = state[:, :, 0:befor.shape[-2], 0:befor.shape[-1]]
+
+        means_pos, log_stds_pos = state.reshape(batch_size, 2*befor.shape[-2] * befor.shape[-1]).chunk(2, dim=-1)
+
 
 
         action_pos, log_pi_pos = reparameterize(means_pos, log_stds_pos.clamp(-20, 2))
@@ -661,7 +717,7 @@ class SAC(Algorithm):
 
 
         # オプティマイザ．
-        self.optim_actor = torch.optim.RMSprop(self.actor.parameters(), lr=lr_actor)
+        self.optim_actor = torch.optim.Adam(self.actor.parameters(), lr=lr_actor)
 
         self.optim_critic = torch.optim.Adam(self.critic.parameters(), lr=lr_critic)
 
@@ -674,6 +730,7 @@ class SAC(Algorithm):
         self.tau = tau
         self.alpha = alpha
         self.reward_scale = reward_scale
+        self.t_global = 0
 
         self.actor_update_count = 0
 
@@ -687,13 +744,25 @@ class SAC(Algorithm):
 
     def step(self, env, befor, state, t, steps):
         t += 1
+        self.t_global += 1
+        print(self.t_global)
 
         # 学習初期の一定期間(start_steps)は，ランダムに行動して多様なデータの収集を促進する
-        if steps <= self.start_steps:
+        next_state, reward, done = None, None, None
+        if env.use_actions is not None and self.t_global % self.batch_size < 200:
+            action = env.action_sample_supervised()
+            next_state, reward, done, _ = env.step(action)
+            reward += 500
+            print(env.max_rew)
+            print(env.max_eq)
+
+        elif steps <= self.start_steps:
             action = env.action_sample()
+            next_state, reward, done, _ = env.step(action)
+
         else:
             action, _ = self.explore(befor, state, env.goal)
-        next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, _ = env.step(action)
 
 
         # ゲームオーバーではなく，最大ステップ数に到達したことでエピソードが終了した場合は，
@@ -716,6 +785,7 @@ class SAC(Algorithm):
         if done:
             t = 0
             next_state = env.reset()
+            print("reset done")
 
         return next_state, t
 
@@ -764,7 +834,7 @@ class SAC(Algorithm):
 
         next_qs = self.critic_target(next_states, after_next_actions, goal, batch_size = self.batch_size)
 
-        next_qs = torch.tensor(torch.min(next_qs, dim=0).values.mean()) - self.alpha * torch.tensor(log_pis).mean()
+        next_qs = torch.min(next_qs, dim=0).values.mean() - self.alpha * torch.tensor(log_pis).mean()
 
 
         target_qs = rewards * self.reward_scale + (1.0 - dones) * self.gamma * next_qs
@@ -784,11 +854,11 @@ class SAC(Algorithm):
         (loss_critic1 + loss_critic2).mean().backward(retain_graph=True)
 
 
-        # for name, param in self.critic.named_parameters():
-        #   if param.grad is not None:
-        #       print(f"Gradients for {name}: {param.grad.mean()}")
-        #   else:
-        #       print("grad is None")
+        for name, param in self.critic.named_parameters():
+          if param.grad is not None:
+              print(f"Gradients for {name}: {param.grad.mean()}")
+          else:
+              print("grad is None")
 
         self.optim_critic.step()
 
@@ -823,14 +893,14 @@ class SAC(Algorithm):
 
         actor_update_start = time()
         self.optim_actor.zero_grad()
-        loss_actor.backward(retain_graph=True)
+        (-loss_actor).backward(retain_graph=True)
 
-        # for name, param in self.actor.named_parameters():
-        #   if param.grad is not None:
-        #       print(f"Gradients for {name}: {param.grad.mean()}")
+        for name, param in self.actor.named_parameters():
+          if param.grad is not None:
+              print(f"Gradients for {name}: {param.grad.mean()}")
 
-        #   else:
-        #       print("gradient is None")
+          else:
+              print("gradient is None")
 
         self.optim_actor.step()
         actor_update_end = time()

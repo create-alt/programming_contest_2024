@@ -8,7 +8,7 @@ class transition():
     本クラスはenv(学習環境)として扱うクラスであるので、
     行動に対して次の状態と報酬、実行が終わったかどうかを返す。
     """
-    def __init__(self, board, cutter, goal, frequ=1, test=False, EPISODE_SIZE = 1000):
+    def __init__(self, board, cutter, goal, frequ=1, test=False, EPISODE_SIZE = 1000, get_actions = None):
         """
         board (2次元list)  => 最初に与えられたボードの状態(0~3)
                                 臨時的な値として'-1'は穴抜けを表す
@@ -41,7 +41,7 @@ class transition():
             if board[i][j] == goal[i][j]:
               self.default_eq += 1
 
-        self.before_eq = self.default_eq / len(board) * len(board[0])
+        self.before_eq = self.default_eq / (len(board) * len(board[0]))
 
         self.num_of_cutter = len(self.cutter)
         self.state_shape  = [len(board), len(board[0])]
@@ -61,6 +61,10 @@ class transition():
 
         self.save_file_name   = None
         self.before_file_name = None
+
+        self.use_actions = get_actions
+        if get_actions is not None:
+            self.supervised_index = len(get_actions) - 1 
 
     def step(self, act):
         """
@@ -101,16 +105,11 @@ class transition():
       """
       本メソッドでは、選択した行動の結果から次の状態を計算する
       """
-      start = time()
 
       # cutterのサイズと型抜き座標を定数として格納
       X_SIZE, Y_SIZE = len(cutter), len(cutter[0])
       X, Y = pos[0], pos[1]
       x_boardsize, y_boardsize = len(board), len(board[0])
-
-      # 移動方向をベクトルで定義
-      direction_vectors = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
-      dx, dy = direction_vectors[direction]
 
       # cut_valを動的に確保 (メモリの無駄を避けるため、必要サイズだけ確保)
       cut_val = []
@@ -189,9 +188,6 @@ class transition():
                           board[X + i][j] = cut_val[cut_index]
                           cut_index += 1
 
-      end = time()
-      # print(f"action time : {end-start}")
-
       return board
 
 
@@ -224,6 +220,7 @@ class transition():
         # 全一致時の大きな報酬
         if num_eq == total_pieces:
             this_rew += 1000  # 全一致時のボーナス
+            self.done = True
 
         # 一致数が改善している場合は報酬を増加
         if num_eq > self.before_eq:
@@ -261,9 +258,11 @@ class transition():
         else:
             self.board = copy.deepcopy(self.start)
 
-        self.default_eq = self.max_eq
+        self.board = copy.deepcopy(self.start)
 
-        self.before_eq = self.default_eq
+        # self.default_eq = self.max_eq
+
+        self.before_eq = self.max_eq
 
         self.before_file_name = self.save_file_name
         self.save_file_name = None
@@ -284,6 +283,9 @@ class transition():
 
         self.ans = {"n":0, "ops":[]}
 
+        if self.use_actions is not None:
+            self.supervised_index = len(self.use_actions) - 1
+
         return self.board
 
     def action_sample(self):
@@ -298,5 +300,19 @@ class transition():
         action.append(random.randint(0,self.y_boardsize-1))
         action.append(random.randint(0,self.num_of_cutter-1))
         action.append(random.randint(0,3))
+
+        return action
+    
+    def action_sample_supervised(self):
+
+        action = []
+
+        if self.use_actions is not None and self.supervised_index >= 0:
+            action = self.use_actions[self.supervised_index]
+            self.supervised_index -= 1
+            if self.supervised_index < 0:
+                _ = self.reset()
+        else:
+            action = None
 
         return action

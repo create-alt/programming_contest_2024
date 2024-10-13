@@ -117,11 +117,13 @@ boardやcutterの作成
 本来はjsonファイルの入力を受け取るが、プログラムのテスト用に直接作成
 """
 
-board_train, goal_train, cutter = create_train_board(seed=0, 
+board_train, goal_train, cutter, get_actions = create_train_board(seed=7, 
                                                      board_shape=[32,32],
                                                      cutter_add_num=0,
-                                                     num_of_shuffle=25, #最短何手でgoalにたどり着くのかを指定
+                                                     num_of_shuffle=20, #最短何手でgoalにたどり着くのかを指定
                                                     )
+
+print(get_actions)
 
 board_test = copy.deepcopy(board_train)
 goal_test = copy.deepcopy(goal_train)
@@ -180,13 +182,13 @@ plt.show()
 """
 SEED = 0
 REWARD_SCALE = 0.99
-NUM_STEPS = 5 * 10 ** 4
+NUM_STEPS = 5 * 10 ** 5
 BATCH_SIZE = 400
 EVAL_INTERVAL = BATCH_SIZE * 10
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
-env = transition(board_train, cutter, goal_train, EPISODE_SIZE=BATCH_SIZE)
-env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=BATCH_SIZE)
+env = transition(board_train, cutter, goal_train, EPISODE_SIZE=BATCH_SIZE, get_actions=get_actions)
+env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=BATCH_SIZE, get_actions=get_actions)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -198,12 +200,12 @@ algo = SAC(
     seed=SEED,
     reward_scale=REWARD_SCALE,
     batch_size=BATCH_SIZE,
-    lr_actor=1e-2,
-    lr_critic=1e-2,
-    replay_size=10**3,
+    lr_actor=5e-4,
+    lr_critic=5e-4,
+    replay_size=4*10**3,
     start_steps=BATCH_SIZE,
-    # pretrain = True,
-    # model_weight_name = 'model_0.40625'
+    pretrain = True,
+    model_weight_name = 'model_756,1296'
 )
 
 trainer = Trainer(
