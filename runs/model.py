@@ -80,7 +80,7 @@ class Trainer:
 
             # アルゴリズムが準備できていれば，1回学習を行う．
             if self.algo.is_update(steps):
-                for _ in range(2):
+                for _ in range(10):
                  self.algo.update(self.env)
 
             # 一定のインターバルで評価する．
@@ -102,6 +102,7 @@ class Trainer:
         """ 複数エピソード環境を動かし，平均収益を記録する． """
 
         state = self.env_test.reset()
+        self.env_test.num_step = -200
         befor = None
         done = False
         total_reward = 0
@@ -129,16 +130,16 @@ class Trainer:
         print(f"total reward   is {total_reward}")
         print(f"max reward     is {self.env_test.max_rew}")
         print(f"max eq         is {self.env_test.max_eq}")
-        print(f"best step      is {self.env_test.best_step}")
+        print(f"best step      is {self.env_test.best_step + 200}")
         print(f"evalueate time is {self.time}")
 
         self.returns['step'].append(steps)
         self.returns['return'].append(self.env_test.max_rew)
-        self.returns['best_step'].append(self.env_test.best_step)
+        self.returns['best_step'].append(self.env_test.best_step+200)
 
         plot_board(self.env_test.ans_board)
 
-        self.env_test.ans["n"] = self.env_test.best_step
+        self.env_test.ans["n"] = self.env_test.best_step+200
 
         output = {"n":self.env_test.best_step, "ops": []}
 
@@ -278,7 +279,7 @@ class Algorithm(ABC):
                 action_pos_x = action_pos // len(state[0])
                 action_pos_y = action_pos % len(state[0][0])
 
-                print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
+                # print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
 
                 action_sellect = torch.argmax(action_sellect, dim=-1).cpu().numpy()
 
@@ -299,7 +300,7 @@ class Algorithm(ABC):
                 action_pos_x = action_pos // len(state[0])
                 action_pos_y = action_pos % len(state[0][0])
 
-                print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
+                # print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
 
                 action_sellect = random.choices(self.sellect_list, k=1, weights=action_sellect.view(-1).cpu().detach().numpy().tolist())[0]
 
@@ -658,6 +659,7 @@ class ReplayBuffer:
     def sample(self, batch_size):
         # idxes = np.random.randint(low=0, high=self._n, size=batch_size)
         idxes = np.arange(batch_size) + np.random.randint(low=0, high=self._n // batch_size, size=1) * self.batch_size
+
         return (
             self.states[idxes],
             self.actions[idxes],
@@ -734,6 +736,8 @@ class SAC(Algorithm):
 
         self.actor_update_count = 0
 
+        self.batch_num = 0
+
         self.pos_list     = list(range(state_shape[0]*state_shape[1]))
         self.sellect_list = list(range(num_of_cutter))
         self.direct_list  = list(range(4))
@@ -745,16 +749,14 @@ class SAC(Algorithm):
     def step(self, env, befor, state, t, steps):
         t += 1
         self.t_global += 1
-        print(self.t_global)
 
         # 学習初期の一定期間(start_steps)は，ランダムに行動して多様なデータの収集を促進する
         next_state, reward, done = None, None, None
-        if env.use_actions is not None and self.t_global % self.batch_size < 200:
+        # if env.use_actions is not None:
+        if env.use_actions is not None and self.batch_num % 5 == 0:
             action = env.action_sample_supervised()
             next_state, reward, done, _ = env.step(action)
             reward += 500
-            print(env.max_rew)
-            print(env.max_eq)
 
         elif steps <= self.start_steps:
             action = env.action_sample()
@@ -784,8 +786,8 @@ class SAC(Algorithm):
         # エピソードが終了した場合には，環境をリセットする．
         if done:
             t = 0
+            self.batch_num += 1
             next_state = env.reset()
-            print("reset done")
 
         return next_state, t
 
@@ -793,6 +795,7 @@ class SAC(Algorithm):
         print("start update")
 
         self.learning_steps += 1
+
         states, _, rewards, dones, next_states, goal = self.buffer.sample(self.batch_size)
 
         self.update_critic(states, rewards, dones, next_states, goal, env)
@@ -804,8 +807,6 @@ class SAC(Algorithm):
             self.actor_update_count += 1
 
         self.update_target()
-
-        print("end update")
 
     def update_critic(self, states, rewards, dones, next_states, goal, env):
         curr_qs = self.critic(states, next_states, goal, batch_size = self.batch_size)
@@ -829,7 +830,6 @@ class SAC(Algorithm):
         after_next_actions      = torch.cat([next_states[1:self.batch_size], after_next_actions_last.unsqueeze_(0)], dim=0)
 
         act_end = time()
-        print(f"act time is {act_end - act_start}")
 
 
         next_qs = self.critic_target(next_states, after_next_actions, goal, batch_size = self.batch_size)
@@ -854,16 +854,15 @@ class SAC(Algorithm):
         (loss_critic1 + loss_critic2).mean().backward(retain_graph=True)
 
 
-        for name, param in self.critic.named_parameters():
-          if param.grad is not None:
-              print(f"Gradients for {name}: {param.grad.mean()}")
-          else:
-              print("grad is None")
+        # for name, param in self.critic.named_parameters():
+        #   if param.grad is not None:
+        #       print(f"Gradients for {name}: {param.grad.mean()}")
+        #   else:
+        #       print("grad is None")
 
         self.optim_critic.step()
 
         critic_update_end = time()
-        print(f"critic backward time is {critic_update_end - critic_update_start}")
 
 
     def update_actor(self, states, goal, env):
@@ -884,27 +883,33 @@ class SAC(Algorithm):
         #       break
         #     next_states[i] = states[i+1]
 
+        # for i in range(self.batch_size):
+        #     next_states[i] = env.action(states[i], [actions[i][0], actions[i][1]], env.cutter[actions[i][2]], actions[i][3])
+
         act_end = time()
-        print(f"act time is {act_end - act_start}")
 
         qs = self.critic(states, next_states, goal, batch_size = self.batch_size)
-        loss_actor = (self.alpha * log_pis.mean() - torch.min(qs, dim=-1).values.mean()).mean()
+        loss_actor = 0
+        for i in range(len(log_pis)):
+            tmp_loss = 0
+            for j  in range(len(qs)):
+                tmp_loss += (self.alpha * log_pis[i] - torch.min(qs, dim=-1).values[j])
+            loss_actor += tmp_loss / len(qs)
         print(f"actor loss = {loss_actor}")
 
         actor_update_start = time()
         self.optim_actor.zero_grad()
         (-loss_actor).backward(retain_graph=True)
 
-        for name, param in self.actor.named_parameters():
-          if param.grad is not None:
-              print(f"Gradients for {name}: {param.grad.mean()}")
+        # for name, param in self.actor.named_parameters():
+        #   if param.grad is not None:
+        #       print(f"Gradients for {name}: {param.grad.mean()}")
 
-          else:
-              print("gradient is None")
+        #   else:
+        #       print("gradient is None")
 
         self.optim_actor.step()
         actor_update_end = time()
-        print(f"actor backward time is {actor_update_end - actor_update_start}")
 
     def update_target(self):
         for t, s in zip(self.critic_target.parameters(), self.critic.parameters()):

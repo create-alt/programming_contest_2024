@@ -210,25 +210,26 @@ class transition():
                     num_eq_before += 1
 
         # 報酬計算
-        progress = (num_eq - self.default_eq) / total_pieces
-        this_rew = progress * 100  # 進捗に基づいた報酬
+        # progress = (num_eq - self.default_eq) / total_pieces
+        # this_rew = progress * 100  # 進捗に基づいた報酬
+        this_rew = (num_eq / total_pieces) * 100
 
-        # 一致数が減少してもペナルティは軽減する
-        if num_eq < self.before_eq:
-            this_rew -= 5  # 一時的な減少に対して軽いペナルティ
+        # # 一致数が減少してもペナルティは軽減する
+        # if num_eq < self.before_eq:
+        #     this_rew -= 5  # 一時的な減少に対して軽いペナルティ
 
         # 全一致時の大きな報酬
         if num_eq == total_pieces:
             this_rew += 1000  # 全一致時のボーナス
             self.done = True
 
-        # 一致数が改善している場合は報酬を増加
-        if num_eq > self.before_eq:
-            this_rew += 50  # 改善が見られる場合のボーナス
+        # # 一致数が改善している場合は報酬を増加
+        # if num_eq > self.before_eq:
+        #     this_rew += 50  # 改善が見られる場合のボーナス
 
-        # 前回の一致数を更新
-        self.num_eq = num_eq / total_pieces
-        self.before_eq = num_eq
+        # # 前回の一致数を更新
+        # self.num_eq = num_eq / total_pieces
+        # self.before_eq = num_eq
 
         # デバッグ用の表示
         if self.num_step % 100 == 0:

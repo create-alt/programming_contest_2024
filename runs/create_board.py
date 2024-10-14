@@ -37,7 +37,7 @@ import random
 import copy
 from Env import transition
 
-def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_shuffle=5):
+def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_shuffle=5, goal = None):
   random.seed(seed)
 
   goal_board = []
@@ -48,6 +48,9 @@ def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_sh
 
     for j in range(board_shape[1]):
       goal_board[i].append(random.randint(0, 3))
+
+  if goal is not None:
+    goal_board = copy.deepcopy(goal)
 
   cutter = create_cutter(cutter_add_num)
 

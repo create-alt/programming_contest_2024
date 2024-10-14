@@ -117,24 +117,7 @@ boardやcutterの作成
 本来はjsonファイルの入力を受け取るが、プログラムのテスト用に直接作成
 """
 
-board_train, goal_train, cutter, get_actions = create_train_board(seed=7, 
-                                                     board_shape=[32,32],
-                                                     cutter_add_num=0,
-                                                     num_of_shuffle=20, #最短何手でgoalにたどり着くのかを指定
-                                                    )
 
-print(get_actions)
-
-board_test = copy.deepcopy(board_train)
-goal_test = copy.deepcopy(goal_train)
-
-count = 0
-for i in range(len(board_train)):
-  for j in range(len(board_train[0])):
-    if(board_test[i][j] == goal_test[i][j]):
-      count+=1
-
-print(count)
 
 
 """
@@ -180,11 +163,40 @@ plt.show()
 """
 環境とネットワークのインスタンス生成と訓練の開始
 """
-SEED = 0
+SEED = 20
 REWARD_SCALE = 0.99
-NUM_STEPS = 5 * 10 ** 5
-BATCH_SIZE = 400
+NUM_STEPS = 10 ** 4
+BATCH_SIZE = 200
 EVAL_INTERVAL = BATCH_SIZE * 10
+
+random.seed(0)
+goal_board = []
+
+for i in range(32):
+    goal_board.append([])
+
+    for j in range(32):
+      goal_board[i].append(random.randint(0, 3))
+
+
+board_train, goal_train, cutter, get_actions = create_train_board(seed=0, 
+                                                     board_shape=[32,32],
+                                                     cutter_add_num=0,
+                                                     num_of_shuffle=BATCH_SIZE, #最短何手でgoalにたどり着くのかを指定
+                                                     goal = goal_board)
+
+print(get_actions)
+
+board_test = copy.deepcopy(board_train)
+goal_test = copy.deepcopy(goal_train)
+
+count = 0
+for i in range(len(board_train)):
+  for j in range(len(board_train[0])):
+    if(board_test[i][j] == goal_test[i][j]):
+      count+=1
+
+print(count)
 
 #以下の引数は学習・テストデータであり、別で作成・形成を行う
 env = transition(board_train, cutter, goal_train, EPISODE_SIZE=BATCH_SIZE, get_actions=get_actions)
@@ -193,8 +205,8 @@ env_test = transition(board_test, cutter, goal_test, test = True, EPISODE_SIZE=B
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 algo = SAC(
-    state_shape=env.state_shape, #実験時にはそれに合わせた値で、本制作時には最大値で設定・学習する
-    action_shape=env.action_shape,     #上同
+    state_shape=env.state_shape, 
+    action_shape=env.action_shape, 
     num_of_cutter = env.num_of_cutter,
     device=device,
     seed=SEED,
@@ -204,8 +216,8 @@ algo = SAC(
     lr_critic=5e-4,
     replay_size=4*10**3,
     start_steps=BATCH_SIZE,
-    pretrain = True,
-    model_weight_name = 'model_756,1296'
+    # pretrain = True,
+    # model_weight_name = 'model_293,1024'
 )
 
 trainer = Trainer(
