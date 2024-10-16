@@ -164,23 +164,23 @@ plt.show()
 環境とネットワークのインスタンス生成と訓練の開始
 """
 SEED = 20
-REWARD_SCALE = 0.99
-NUM_STEPS = 10 ** 4
+REWARD_SCALE = 0.9
+NUM_STEPS = 10 ** 5
 BATCH_SIZE = 200
 EVAL_INTERVAL = BATCH_SIZE * 10
 
-random.seed(0)
+random.seed(1)
 goal_board = []
-
-for i in range(32):
+board_shape = [32,64]
+for i in range(board_shape[0]):
     goal_board.append([])
 
-    for j in range(32):
+    for j in range(board_shape[1]):
       goal_board[i].append(random.randint(0, 3))
 
 
 board_train, goal_train, cutter, get_actions = create_train_board(seed=0, 
-                                                     board_shape=[32,32],
+                                                     board_shape=board_shape,
                                                      cutter_add_num=0,
                                                      num_of_shuffle=BATCH_SIZE, #最短何手でgoalにたどり着くのかを指定
                                                      goal = goal_board)
@@ -217,7 +217,7 @@ algo = SAC(
     replay_size=4*10**3,
     start_steps=BATCH_SIZE,
     # pretrain = True,
-    # model_weight_name = 'model_293,1024'
+    # model_weight_name = 'model_310,1024'
 )
 
 trainer = Trainer(

@@ -57,6 +57,8 @@ class Trainer:
 
         self.max_rew_data = None
 
+        self.send_data_name = None
+
     def train(self):
         """ num_stepsステップの間，データ収集・学習・評価を繰り返す． """
 
@@ -122,7 +124,7 @@ class Trainer:
             if rand:
                 rand=False
             
-            if abs(num_eq_before - self.env_test.num_eq) < 0.0005:
+            if abs(num_eq_before - self.env_test.num_eq) < 0.0001:
                 rand = True
 
             num_eq_before = self.env_test.num_eq
@@ -165,20 +167,24 @@ class Trainer:
                     with open(json_name, 'w') as f:
                         json.dump(save_data, f, indent=2)
 
-            """
-                # solution.json を読み込む
-                with open(json_name, 'r') as f:
-                    solution_data = json.load(f)
+                if self.send_data_name is None:
+                    self.send_data_name = self.env_test.save_file_name
+                """
+                elif self.send_data_name =< self.env_test.save_file_name:
+                    
+                    # solution.json を読み込む
+                    with open(json_name, 'r') as f:
+                        solution_data = json.load(f)
 
-                # ヘッダーの設定
-                headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+                    # ヘッダーの設定
+                    headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
 
-                # POST リクエストを送信
-                response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
+                    # POST リクエストを送信
+                    response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
 
-                # レスポンスのステータスコードと内容を確認
-                print("Status Code:", response.status_code)
-            """
+                    # レスポンスのステータスコードと内容を確認
+                    print("Status Code:", response.status_code)
+                """
 
     def plot_return(self):
         """ 平均収益のグラフを描画する． """
@@ -268,7 +274,7 @@ class Algorithm(ABC):
         goal  = torch.tensor(goal, dtype=torch.float, device=self.device).unsqueeze_(0)
         befor = torch.tensor(befor, dtype=torch.float, device=self.device).unsqueeze_(0)
 
-        if not random:
+        if not rand:
             with torch.no_grad():
                 action_pos, action_sellect, action_direct = self.actor(befor, state, goal)
                 action_pos, action_sellect, action_direct = action_pos + abs(torch.min(action_pos.view(-1))) + 1e-3, action_sellect + abs(torch.min(action_sellect.view(-1)))+1e-3, action_direct + abs(torch.min(action_direct.view(-1)))+1e-3
@@ -389,23 +395,23 @@ class SACActor(nn.Module):
 
         self.TCB1 = TwoConvBlock(3, 16, 16)
         self.TCB2 = TwoConvBlock(16, 32, 32)
-        self.TCB3 = TwoConvBlock(32, 64, 64)
-        self.TCB4 = TwoConvBlock(64, 128, 128)
+        # self.TCB3 = TwoConvBlock(32, 64, 64)
+        # self.TCB4 = TwoConvBlock(64, 128, 128)
         # self.TCB5 = TwoConvBlock(128, 256, 256)
 
-        self.linear_sellect = nn.Linear(128, 2 * 100)
-        self.linear_direction = nn.Linear(128, 2 * 4)
+        self.linear_sellect = nn.Linear(32, 2 * 100)
+        self.linear_direction = nn.Linear(32, 2 * 4)
 
         # self.TCB6 = TwoConvBlock(256, 128, 128)
-        self.TCB7 = TwoConvBlock(128, 64, 64)
-        self.TCB8 = TwoConvBlock(64, 32, 32)
+        # self.TCB7 = TwoConvBlock(128, 64, 64)
+        # self.TCB8 = TwoConvBlock(64, 32, 32)
         self.TCB9 = TwoConvBlock(32, 16, 16)
         self.maxpool = nn.MaxPool2d(2, stride = 2)
         self.gap = nn.AdaptiveAvgPool2d(1)
 
         # self.UC1 = UpConv(256, 128)
-        self.UC2 = UpConv(128, 64)
-        self.UC3 = UpConv(64, 32)
+        # self.UC2 = UpConv(128, 64)
+        # self.UC3 = UpConv(64, 32)
         self.UC4= UpConv(32, 16)
 
         self.conv1 = nn.Conv2d(16, 2, kernel_size = 1)
@@ -455,14 +461,14 @@ class SACActor(nn.Module):
         state = self.maxpool(state)
 
         state = self.TCB2(state)
-        x2 = state
-        state = self.maxpool(state)
+        # x2 = state
+        # state = self.maxpool(state)
 
-        state = self.TCB3(state)
-        x3 = state
-        state = self.maxpool(state)
+        # state = self.TCB3(state)
+        # x3 = state
+        # state = self.maxpool(state)
 
-        state = self.TCB4(state)
+        # state = self.TCB4(state)
 
         x_sellect_direction = self.gap(state).view(batch_size, -1)
         return_sellect = self.linear_sellect(x_sellect_direction).chunk(2, dim=-1)[0]
@@ -472,13 +478,13 @@ class SACActor(nn.Module):
 
         return_direct = torch.tanh(return_direct)
 
-        state = self.UC2(state)
-        state = torch.cat([x3, state], dim = 1)
-        state = self.TCB7(state)
+        # state = self.UC2(state)
+        # state = torch.cat([x3, state], dim = 1)
+        # state = self.TCB7(state)
 
-        state = self.UC3(state)
-        state = torch.cat([x2, state], dim = 1)
-        state = self.TCB8(state)
+        # state = self.UC3(state)
+        # state = torch.cat([x2, state], dim = 1)
+        # state = self.TCB8(state)
 
         state = self.UC4(state)
         state = torch.cat([x1, state], dim = 1)
@@ -533,14 +539,14 @@ class SACActor(nn.Module):
         state = self.maxpool(state)
 
         state = self.TCB2(state)
-        x2 = state
-        state = self.maxpool(state)
+        # x2 = state
+        # state = self.maxpool(state)
 
-        state = self.TCB3(state)
-        x3 = state
-        state = self.maxpool(state)
+        # state = self.TCB3(state)
+        # x3 = state
+        # state = self.maxpool(state)
 
-        state = self.TCB4(state)
+        # state = self.TCB4(state)
 
         x_sellect_direction = self.gap(state).view(batch_size, -1)
         means_sellect, log_stds_sellect = self.linear_sellect(x_sellect_direction).chunk(2, dim=-1)
@@ -548,14 +554,14 @@ class SACActor(nn.Module):
         means_direct, log_stds_direct = self.linear_direction(x_sellect_direction).chunk(2, dim=-1)
 
 
-        state = self.UC2(state)
+        # state = self.UC2(state)
 
-        state = torch.cat([x3, state], dim = 1)
-        state = self.TCB7(state)
+        # state = torch.cat([x3, state], dim = 1)
+        # state = self.TCB7(state)
 
-        state = self.UC3(state)
-        state = torch.cat([x2, state], dim = 1)
-        state = self.TCB8(state)
+        # state = self.UC3(state)
+        # state = torch.cat([x2, state], dim = 1)
+        # state = self.TCB8(state)
 
         state = self.UC4(state)
         state = torch.cat([x1, state], dim = 1)
@@ -582,13 +588,13 @@ class SACCritic(nn.Module):
 
         self.TCB1 = TwoConvBlock(3, 16, 16)
         self.TCB2 = TwoConvBlock(16, 32, 32)
-        self.TCB3 = TwoConvBlock(32, 64, 64)
-        self.TCB4 = TwoConvBlock(64, 128, 128)
+        # self.TCB3 = TwoConvBlock(32, 64, 64)
+        # self.TCB4 = TwoConvBlock(64, 128, 128)
         self.maxpool = nn.MaxPool2d(2, stride = 2)
 
         self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.linear = nn.Linear(128, 2)
+        self.linear = nn.Linear(32, 2)
 
     def forward(self, state, after_action, goal, batch_size=1):
 
@@ -610,12 +616,12 @@ class SACCritic(nn.Module):
         state = self.maxpool(state)
 
         state = self.TCB2(state)
-        state = self.maxpool(state)
+        # state = self.maxpool(state)
 
-        state = self.TCB3(state)
-        state = self.maxpool(state)
+        # state = self.TCB3(state)
+        # state = self.maxpool(state)
 
-        state = self.TCB4(state)
+        # state = self.TCB4(state)
 
         state = self.gap(state).view(batch_size, -1)
 
@@ -753,10 +759,10 @@ class SAC(Algorithm):
         # 学習初期の一定期間(start_steps)は，ランダムに行動して多様なデータの収集を促進する
         next_state, reward, done = None, None, None
         # if env.use_actions is not None:
-        if env.use_actions is not None and self.batch_num % 5 == 0:
+        if env.use_actions is not None and self.batch_num % 3 == 0:
             action = env.action_sample_supervised()
             next_state, reward, done, _ = env.step(action)
-            reward += 500
+            reward += 5000
 
         elif steps <= self.start_steps:
             action = env.action_sample()
@@ -867,6 +873,11 @@ class SAC(Algorithm):
 
     def update_actor(self, states, goal, env):
         befor_states = torch.zeros_like(states)
+
+        ans_act = None
+        if env.use_actions is not None:
+          ans_act = env.use_actions
+
         for i in range(len(states)-1):
             befor_states[i+1] = states[i]
         actions, log_pis = self.explore(befor_states, states, goal, self.batch_size)
@@ -889,17 +900,28 @@ class SAC(Algorithm):
         act_end = time()
 
         qs = self.critic(states, next_states, goal, batch_size = self.batch_size)
-        loss_actor = 0
-        for i in range(len(log_pis)):
-            tmp_loss = 0
-            for j  in range(len(qs)):
-                tmp_loss += (self.alpha * log_pis[i] - torch.min(qs, dim=-1).values[j])
-            loss_actor += tmp_loss / len(qs)
-        print(f"actor loss = {loss_actor}")
+        loss_actor1, loss_actor2 = 0, 0
+        # if ans_act is not None:
+        #   for i in range(len(actions)):
+        #     cutter_is, direct_is = 0, 0
+        #     if actions[i][2] == ans_act[i][2]:
+        #       cutter_is = 1
+        #     if actions[i][3] == ans_act[i][3]:
+        #       direct_is = 1
+ 
+        #     default_loss = self.alpha * log_pis.mean() - torch.min(qs, dim=-1).values.mean()
+ 
+        #     loss_actor1 = default_loss / (1e-6 + abs(actions[i][0] - ans_act[i][0]) + abs(actions[i][1] - ans_act[i][1]))
+        #     loss_actor2 = (cutter_is * default_loss + direct_is * default_loss) / 2
+ 
+        # else:
+        loss_actor = (self.alpha * log_pis.mean() - torch.min(qs, dim=-1).values.mean())
+       
+        print(f"actor loss1 = {loss_actor}")
 
         actor_update_start = time()
         self.optim_actor.zero_grad()
-        (-loss_actor).backward(retain_graph=True)
+        loss_actor.backward(retain_graph=True)
 
         # for name, param in self.actor.named_parameters():
         #   if param.grad is not None:

@@ -41,7 +41,7 @@ class transition():
             if board[i][j] == goal[i][j]:
               self.default_eq += 1
 
-        self.before_eq = self.default_eq / (len(board) * len(board[0]))
+        self.before_eq = self.default_eq
 
         self.num_of_cutter = len(self.cutter)
         self.state_shape  = [len(board), len(board[0])]
@@ -212,7 +212,10 @@ class transition():
         # 報酬計算
         # progress = (num_eq - self.default_eq) / total_pieces
         # this_rew = progress * 100  # 進捗に基づいた報酬
-        this_rew = (num_eq / total_pieces) * 100
+        this_rew = ((num_eq - self.before_eq) / total_pieces) * 1000
+
+        if self.before_eq < num_eq:
+            self.before_eq = num_eq
 
         # # 一致数が減少してもペナルティは軽減する
         # if num_eq < self.before_eq:
