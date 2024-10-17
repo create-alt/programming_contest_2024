@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from time import time
+from time import time, sleep
 from datetime import timedelta
 import random
 import math
@@ -94,8 +94,14 @@ class Trainer:
 
         if self.max_eq < self.env_test.max_eq:
           self.max_eq = self.env_test.max_eq
-          model_path = path + f'model_{self.env_test.max_eq},{
-              self.env_test.state_shape[0] * self.env_test.state_shape[1]}'
+          model_path = path + f'model_{self.env_test.max_eq},{self.env_test.state_shape[0] * self.env_test.state_shape[1]}'
+          torch.save(self.algo.actor.state_dict(), model_path + '_actor')
+          torch.save(self.algo.critic.state_dict(), model_path + '_critic')
+          torch.save(self.algo.critic_target.state_dict(),
+                     model_path + '_critic_target')
+
+        elif steps == self.num_steps:
+          model_path = path + f'model_{self.env_test.max_eq},{self.env_test.state_shape[0] * self.env_test.state_shape[1]}_last'
           torch.save(self.algo.actor.state_dict(), model_path + '_actor')
           torch.save(self.algo.critic.state_dict(), model_path + '_critic')
           torch.save(self.algo.critic_target.state_dict(),
@@ -140,13 +146,14 @@ class Trainer:
     self.returns['return'].append(self.env_test.max_rew)
     self.returns['best_step'].append(self.env_test.best_step + 200)
 
-    plot_board(self.env_test.ans_board)
+    sleep(2)
+    #plot_board(self.env_test.ans_board)
 
     self.env_test.ans["n"] = self.env_test.best_step + 200
 
-    output = {"n": self.env_test.best_step, "ops": []}
+    output = {"n": self.env_test.best_step + 200, "ops": []}
 
-    for i in range(self.env_test.best_step):
+    for i in range(self.env_test.best_step + 200):
       output["ops"].append(self.env_test.ans["ops"][i])
 
     # ひとつ前の結果より良くなったらファイルを保存
@@ -170,22 +177,25 @@ class Trainer:
 
         if self.send_data_name is None:
           self.send_data_name = self.env_test.save_file_name
+
         """
-                elif self.send_data_name =< self.env_test.save_file_name:
+        if self.send_data_name =< self.env_test.save_file_name:
+
+            self.send_data_name = self.env_test.save_file_name
                     
-                    # solution.json を読み込む
-                    with open(json_name, 'r') as f:
-                        solution_data = json.load(f)
+            # solution.json を読み込む
+            with open(json_name, 'r') as f:
+                solution_data = json.load(f)
 
-                    # ヘッダーの設定
-                    headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+            # ヘッダーの設定
+            headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
 
-                    # POST リクエストを送信
-                    response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
+            # POST リクエストを送信
+            response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
 
-                    # レスポンスのステータスコードと内容を確認
-                    print("Status Code:", response.status_code)
-                """
+            # レスポンスのステータスコードと内容を確認
+            print("Status Code:", response.status_code)
+        """
 
   def plot_return(self):
     """ 平均収益のグラフを描画する． """
@@ -912,6 +922,7 @@ class SAC(Algorithm):
 
     (loss_critic1 + loss_critic2).mean().backward(retain_graph=True)
 
+    """
     for name, param in self.critic.named_parameters():
       if param.grad is not None:
         print(f"Gradients for critic's {name}: {param.grad.mean()}")
@@ -924,6 +935,8 @@ class SAC(Algorithm):
 
       else:
         print("actor {name}'s gradient is None")
+
+    """
 
     self.optim_critic.step()
 
@@ -981,6 +994,7 @@ class SAC(Algorithm):
     self.optim_actor.zero_grad()
     loss_actor.backward(retain_graph=True)
 
+    """
     for name, param in self.critic.named_parameters():
       if param.grad is not None:
         print(f"Gradients for critic's {name}: {param.grad.mean()}")
@@ -993,6 +1007,8 @@ class SAC(Algorithm):
 
       else:
         print("gradient is None")
+
+    """
 
     self.optim_actor.step()
 

@@ -66,7 +66,7 @@ def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_sh
     Y = random.randint(0, board_shape[1] - 1)
 
     cutter_sellect_number = random.randint(0, len(cutter) - 1)
-    print(cutter_sellect_number)
+    #print(cutter_sellect_number)
     tmp_cutter = cutter[cutter_sellect_number]
     use_cutter_shape = [0, 0]
 
@@ -86,14 +86,13 @@ def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_sh
       for j in range(use_cutter_shape[1]):
         use_cutter[i].append(tmp_cutter[i][j])
 
-      print(use_cutter[i])
+      #print(use_cutter[i])
 
     direct = random.randint(0, 3)
 
     actions.append([X, Y, cutter_sellect_number, direct])
 
-    print(f"X={X}, Y={Y}, cutter's shape = ({len(use_cutter)}, {
-          len(use_cutter[0])}), direct={direct}")
+    #print(f"X={X}, Y={Y}, cutter's shape = ({len(use_cutter)}, {len(use_cutter[0])}), direct={direct}")
 
     cutter_one_nums = []
 
@@ -229,7 +228,7 @@ def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_sh
           cut_pieces[i].append(start_board[X + i][j])
           start_board[X + i][j] = -1
 
-      print(cut_pieces)
+      #print(cut_pieces)
 
       # 切り取られず残るピースを保存（cut_piecesを間に埋め込むので一時保存）
       rem_pieces = []
@@ -240,7 +239,7 @@ def create_train_board(seed=0, board_shape=[32, 32], cutter_add_num=0, num_of_sh
             rem_pieces[i].append(start_board[X + i][j])
             start_board[X + i][j] = -1
 
-      print(rem_pieces)
+      #print(rem_pieces)
 
       for i in range(len(use_cutter)):
         cut_piece_counter = 0
@@ -303,8 +302,7 @@ def create_cutter(add_num=0, seed=0):
 
     for num in range(add_num):
       random.seed(seed + num)
-      H, W = random.choices([4, 8, 16, 32, 64, 128, 256])[0], random.choices(
-          [4, 8, 16, 32, 64, 128, 256])[0]
+      H, W = random.choices([4, 8, 16, 32, 64, 128, 256])[0], random.choices([4, 8, 16, 32, 64, 128, 256])[0]
 
       add_cutter = []
       for i in range(H):

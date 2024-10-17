@@ -169,9 +169,9 @@ NUM_STEPS = 10 ** 5
 BATCH_SIZE = 200
 EVAL_INTERVAL = BATCH_SIZE * 10
 
-random.seed(1)
+random.seed(2)
 goal_board = []
-board_shape = [32,64]
+board_shape = [128,128]
 for i in range(board_shape[0]):
     goal_board.append([])
 
@@ -179,7 +179,7 @@ for i in range(board_shape[0]):
       goal_board[i].append(random.randint(0, 3))
 
 
-board_train, goal_train, cutter, get_actions = create_train_board(seed=0, 
+board_train, goal_train, cutter, get_actions = create_train_board(seed=200, 
                                                      board_shape=board_shape,
                                                      cutter_add_num=0,
                                                      num_of_shuffle=BATCH_SIZE, #最短何手でgoalにたどり着くのかを指定
@@ -216,8 +216,9 @@ algo = SAC(
     lr_critic=5e-4,
     replay_size=4*10**3,
     start_steps=BATCH_SIZE,
-    # pretrain = True,
-    # model_weight_name = 'model_310,1024'
+    tau = 1e-3,
+    #pretrain = True,
+    #model_weight_name = 'model_592,2048'
 )
 
 trainer = Trainer(
