@@ -14,18 +14,17 @@ from model import SAC, Trainer
 from Env import transition
 from create_board import create_train_board
 
-SEED = 100
+SEED = 53
 random.seed(SEED)
 host_name = "http://localhost:8080"
 
 REWARD_SCALE = 0.9
 NUM_STEPS = 10 ** 5
-BATCH_SIZE = 200
-EVAL_INTERVAL = BATCH_SIZE * 10
+BATCH_SIZE = 400
 
 random.seed(2)
 goal_board = []
-board_shape = [128, 128]
+board_shape = [32, 32]
 for i in range(board_shape[0]):
   goal_board.append([])
 
@@ -33,19 +32,19 @@ for i in range(board_shape[0]):
     goal_board[i].append(random.randint(0, 3))
 
 
-board_train, goal_train, cutter, get_actions = create_train_board(seed=200,
-                                                                  board_shape=board_shape,
-                                                                  cutter_add_num=0,
-                                                                  num_of_shuffle=BATCH_SIZE,  # 最短何手でgoalにたどり着くのかを指定
-                                                                  goal=goal_board)
+board_train, goal_train, cutter, _ = create_train_board(seed=71,
+                                                        board_shape=board_shape,
+                                                        cutter_add_num=0,
+                                                        num_of_shuffle=25,  # 最短何手でgoalにたどり着くのかを指定
+                                                        goal=goal_board)
 
-board_test = copy.deepcopy(board_train)
-goal_test = copy.deepcopy(goal_train)
+#board_test = copy.deepcopy(board_train)
+#goal_test = copy.deepcopy(goal_train)
 
 count = 0
 for i in range(len(board_train)):
   for j in range(len(board_train[0])):
-    if (board_test[i][j] == goal_test[i][j]):
+    if (board_train[i][j] == goal_train[i][j]):
       count += 1
 
 print(count)
@@ -53,8 +52,7 @@ print(count)
 # 以下の引数は学習・テストデータであり、別で作成・形成を行う
 env = transition(board_train, cutter, goal_train,
                  EPISODE_SIZE=BATCH_SIZE, get_actions=None)
-env_test = transition(board_test, cutter, goal_test, test=True,
-                      EPISODE_SIZE=BATCH_SIZE, get_actions=None)
+#env_test = transition(board_test, cutter, goal_test, EPISODE_SIZE=BATCH_SIZE, get_actions=None)
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -67,22 +65,20 @@ algo = SAC(
     seed=SEED,
     reward_scale=REWARD_SCALE,
     batch_size=BATCH_SIZE,
-    lr_actor=5e-4,
-    lr_critic=5e-4,
-    replay_size=10**3,
+    lr_actor=5e-2,
+    lr_critic=5e-2,
+    replay_size=BATCH_SIZE*3,
     start_steps=BATCH_SIZE,
     tau=1e-3,
-    # pretrain = True,
-    # model_weight_name = 'model_592,2048'
+    pretrain = True,
+    model_weight_name = 'model_new'
 )
 
 trainer = Trainer(
     env=env,
-    env_test=env_test,
     algo=algo,
     seed=SEED,
     num_steps=NUM_STEPS,
-    eval_interval=EVAL_INTERVAL,
 )
 
 trainer.train()

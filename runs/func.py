@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import json
+from time import sleep
 
 import torch
 
@@ -84,7 +85,16 @@ def concat_jsonfile(filename_old, filename_new):
         solution_new = json.load(f)
 
     send_solution["n"] = solution_old["n"] + solution_new["n"]
+
+    print("before steps", solution_old["n"])
+    print("now steps", solution_new["n"])
+    print("new steps", send_solution["n"])
+
     send_solution["ops"] = solution_old["ops"] + solution_new["ops"]
+
+    print("ops num", len(send_solution["ops"]))
+
+    sleep(10)
 
     return send_solution
 

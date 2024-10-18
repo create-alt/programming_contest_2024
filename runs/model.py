@@ -23,7 +23,7 @@ from torchvision import models
 from func import *
 
 
-path = ""
+path = "../model_weights/"
 host_name = "http://localhost:8080"
 
 
@@ -33,15 +33,13 @@ host_name = "http://localhost:8080"
 
 class Trainer:
 
-  def __init__(self, env, env_test, algo, seed=0, num_steps=10**6, eval_interval=10**3, num_eval_episodes=3):
+  def __init__(self, env, algo, seed=0, num_steps=10**6, num_eval_episodes=3):
 
     self.env = env
-    self.env_test = env_test
     self.algo = algo
 
     # 環境の乱数シードを設定する．
     self.env.seed(seed)
-    self.env_test.seed(2**31 - seed)
 
     # 平均収益を保存するための辞書．
     self.returns = {'step': [], 'return': [], 'best_step': []}
@@ -49,7 +47,6 @@ class Trainer:
     # データ収集を行うステップ数．
     self.num_steps = num_steps
     # 評価の間のステップ数(インターバル)．
-    self.eval_interval = eval_interval
 
     self.max_eq = 0
 
@@ -70,8 +67,6 @@ class Trainer:
     # 環境を初期化する．
     state = self.env.reset()
 
-    self.evaluate(0)
-
     for steps in range(1, self.num_steps + 1):
       # 環境(self.env)，現在の状態(state)，現在のエピソードのステップ数(t)，今までのトータルのステップ数(steps)を
       # アルゴリズムに渡し，状態・エピソードのステップ数を更新する．
@@ -82,38 +77,16 @@ class Trainer:
 
       # アルゴリズムが準備できていれば，1回学習を行う．
       if self.algo.is_update(steps):
-        for _ in range(10):
-          self.algo.update(self.env)
+          for _ in range(1):
+            self.algo.update(self.env)
 
-      # 一定のインターバルで評価する．
-      if (steps % self.eval_interval == 0 and steps >= self.algo.start_steps) or steps == self.num_steps:
-        self.evaluate(steps)
-        # self.env.start = copy.deepcopy(self.env_test.board)
-        # self.env.board = copy.deepcopy(self.env_test.board)
-        # self.befor_state = copy.deepcopy(self.env_test.board)
-
-        if self.max_eq < self.env_test.max_eq:
-          self.max_eq = self.env_test.max_eq
-          model_path = path + f'model_{self.env_test.max_eq},{
-              self.env_test.state_shape[0] * self.env_test.state_shape[1]}'
-          torch.save(self.algo.actor.state_dict(), model_path + '_actor')
-          torch.save(self.algo.critic.state_dict(), model_path + '_critic')
-          torch.save(self.algo.critic_target.state_dict(),
-                     model_path + '_critic_target')
-
-        elif steps == self.num_steps:
-          model_path = path + f'model_{self.env_test.max_eq},{
-              self.env_test.state_shape[0] * self.env_test.state_shape[1]}_last'
-          torch.save(self.algo.actor.state_dict(), model_path + '_actor')
-          torch.save(self.algo.critic.state_dict(), model_path + '_critic')
-          torch.save(self.algo.critic_target.state_dict(),
-                     model_path + '_critic_target')
+        
 
   def evaluate(self, steps):
     """ 複数エピソード環境を動かし，平均収益を記録する． """
 
-    state = self.env_test.reset()
-    self.env_test.num_step = 0
+    state = self.env.reset()
+    self.env.num_step = 0
     befor = None
     done = False
     total_reward = 0
@@ -125,65 +98,65 @@ class Trainer:
     while (not done):
       # print("evaluate step ", evaluate_step)
       evaluate_step += 1
-      action = self.algo.exploit(befor, state, self.env_test.goal, rand=rand)
+      action = self.algo.exploit(befor, state, self.env.goal, rand=rand)
       befor = state
-      state, reward, done, _ = self.env_test.step(action)
+      state, reward, done, _ = self.env.step(action)
       total_reward += reward
 
       if rand:
         rand = False
 
-      if abs(num_eq_before - self.env_test.num_eq) < 0.0001:
+      if abs(num_eq_before - self.env.num_eq) < 0.0001:
         rand = True
 
-      num_eq_before = self.env_test.num_eq
+      num_eq_before = self.env.num_eq
 
     print(f"total reward   is {total_reward}")
-    print(f"max reward     is {self.env_test.max_rew}")
-    print(f"max eq         is {self.env_test.max_eq}")
-    print(f"best step      is {self.env_test.best_step}")
+    print(f"max reward     is {self.env.max_rew}")
+    print(f"max eq         is {self.env.max_eq}")
+    print(f"best step      is {self.env.best_step}")
     print(f"evalueate time is {self.time}")
 
     self.returns['step'].append(steps)
-    self.returns['return'].append(self.env_test.max_rew)
-    self.returns['best_step'].append(self.env_test.best_step)
+    self.returns['return'].append(self.env.max_rew)
+    self.returns['best_step'].append(self.env.best_step)
 
     sleep(2)
-    # plot_board(self.env_test.ans_board)
+    # plot_board(self.env.ans_board)
 
-    self.env_test.ans["n"] = self.env_test.best_step
+    self.env.ans["n"] = self.env.best_step
 
-    output = {"n": self.env_test.best_step, "ops": []}
+    output = {"n": self.env.best_step, "ops": []}
 
-    for i in range(self.env_test.best_step):
-      output["ops"].append(self.env_test.ans["ops"][i])
+    for i in range(self.env.best_step):
+      output["ops"].append(self.env.ans["ops"][i])
 
     # ひとつ前の結果より良くなったらファイルを保存
-    if self.env_test.save_file_name is not None:
-      if self.max_rew_data is None or self.max_rew_data < self.env_test.save_file_name:
+    if self.env.save_file_name is not None:
+      if self.max_rew_data is None or self.max_rew_data < int(self.env.save_file_name):
 
-        json_name = f"./solution_{self.env_test.save_file_name}.json"
+        json_name = f"./solution_{self.env.save_file_name}.json"
 
         with open(json_name, 'w') as f:
           json.dump(output, f, indent=2)
 
-        # self.env.start, self.env.board = self.env_test.ans_board, self.env_test.ans_board
+        # self.env.start, self.env.board = self.env.ans_board, self.env.ans_board
 
         # 2回目以降のファイル保存ならば、ファイルを結合してより良い結果に
-        if self.env_test.before_file_name is not None:
-          before_json_name = f"./solution_{self.env_test.before_file_name}.json"
+        if self.env.before_file_name is not None:
+          before_json_name = f"./solution_{self.env.before_file_name}.json"
           save_data = concat_jsonfile(before_json_name, json_name)
 
           with open(json_name, 'w') as f:
             json.dump(save_data, f, indent=2)
 
         if self.send_data_name is None:
-          self.send_data_name = self.env_test.save_file_name
+          self.send_data_name = self.env.save_file_name
 
-        """
-        if self.send_data_name =< self.env_test.save_file_name:
+        
+        if int(self.send_data_name) <= int(self.env.save_file_name):
 
-            self.send_data_name = self.env_test.save_file_name
+            self.send_data_name = self.env.save_file_name
                     
             # solution.json を読み込む
             with open(json_name, 'r') as f:
@@ -197,7 +170,7 @@ class Trainer:
 
             # レスポンスのステータスコードと内容を確認
             print("Status Code:", response.status_code)
-        """
+        
 
   def plot_return(self):
     """ 平均収益のグラフを描画する． """
@@ -227,7 +200,7 @@ class Trainer:
 
 class Algorithm(ABC):
 
-  def explore(self, befor, state, goal, batch_size=1):
+  def explore(self, befor, state, goal, batch_size=1, rand = False):
     """ 確率論的な行動と，その行動の確率密度の対数 \log(\pi(a|s)) を返す． 
         本メソッドに関しても基本はexploitのように決定的にしてみてもよいかもしれない
     """
@@ -251,9 +224,15 @@ class Algorithm(ABC):
     action_pos_list = []
     action_pos_x = []
     action_pos_y = []
+
     for i in range(batch_size):
-      action_pos_list.append(random.choices(self.pos_list, k=1, weights=mySqueeze(
+
+      if not rand:
+        action_pos_list.append(random.choices(self.pos_list, k=1, weights=mySqueeze(
           action_pos[i].view(-1).detach().cpu().numpy().tolist()))[0])
+      else:
+        action_pos_list.append(torch.argmax(action_pos[i].view(1, -1), dim=-1).cpu().numpy())
+
       action_pos_x.append(action_pos_list[i] // len(state[0]))
       action_pos_y.append(action_pos_list[i] % len(state[0][0]))
 
@@ -262,17 +241,29 @@ class Algorithm(ABC):
     if batch_size != 1:
 
       for i in range(batch_size):
-        action_sellect_list.append(random.choices(self.sellect_list, k=1, weights=mySqueeze(
-            action_sellect[i].cpu().detach().numpy().tolist()))[0])
-        action_direct_list.append(random.choices(self.direct_list, k=1, weights=mySqueeze(
-            action_direct[i].cpu().detach().numpy().tolist()))[0])
+
+        if not rand:
+            action_sellect_list.append(random.choices(self.sellect_list, k=1, weights=mySqueeze(
+                action_sellect[i].cpu().detach().numpy().tolist()))[0])
+            action_direct_list.append(random.choices(self.direct_list, k=1, weights=mySqueeze(
+                action_direct[i].cpu().detach().numpy().tolist()))[0])
+
+        else:
+            action_sellect_list.append(torch.argmax(action_sellect[i], dim=-1).cpu().numpy())
+
+            action_direct_list.append(torch.argmax(action_direct[i], dim=-1).cpu().numpy())
 
     else:
 
-      action_sellect_list = random.choices(self.sellect_list, k=1, weights=mySqueeze(
-          action_sellect.cpu().detach().numpy().tolist()))[0]
-      action_direct_list = random.choices(self.direct_list, k=1, weights=mySqueeze(
-          action_direct.cpu().detach().numpy().tolist()))[0]
+      if not rand:
+          action_sellect_list = random.choices(self.sellect_list, k=1, weights=mySqueeze(
+              action_sellect.cpu().detach().numpy().tolist()))[0]
+          action_direct_list = random.choices(self.direct_list, k=1, weights=mySqueeze(
+              action_direct.cpu().detach().numpy().tolist()))[0]
+      else:
+          action_sellect_list.append(torch.argmax(action_sellect, dim=-1).cpu().numpy())
+
+          action_direct_list.append(torch.argmax(action_direct, dim=-1).cpu().numpy())
 
     if batch_size != 1:
       action = [[action_pos_x[i], action_pos_y[i], action_sellect_list[i],
@@ -518,7 +509,7 @@ class SACActor(nn.Module):
         x_sellect_direction).chunk(2, dim=-1)[0]
 
     return_sellect = torch.tanh(return_sellect)[
-        0][0:self.num_of_cutter].unsqueeze_(0)
+        0][0:self.num_of_cutter-1].unsqueeze_(0)
 
     return_direct = torch.tanh(return_direct)
 
@@ -603,8 +594,7 @@ class SACActor(nn.Module):
     x_sellect_direction = self.gap(state).view(batch_size, -1)
     means_sellect, log_stds_sellect = self.linear_sellect(
         x_sellect_direction).chunk(2, dim=-1)
-    means_sellect, log_stds_sellect = means_sellect[:,
-                                                    0:self.num_of_cutter], log_stds_sellect[:, 0:self.num_of_cutter]
+    means_sellect, log_stds_sellect = means_sellect[:,0:self.num_of_cutter-1], log_stds_sellect[:, 0:self.num_of_cutter-1]
     means_direct, log_stds_direct = self.linear_direction(
         x_sellect_direction).chunk(2, dim=-1)
 
@@ -629,11 +619,11 @@ class SACActor(nn.Module):
         batch_size, 2 * befor.shape[-2] * befor.shape[-1]).chunk(2, dim=-1)
 
     action_pos, log_pi_pos = reparameterize(
-        means_pos, log_stds_pos.clamp(-20, 2))
+        means_pos, log_stds_pos.clamp(-200,20))
     action_sellect, log_pi_sellect = reparameterize(
-        means_sellect, log_stds_sellect.clamp(-20, 2))
+        means_sellect, log_stds_sellect.clamp(-200,20))
     action_direct, log_pi_direct = reparameterize(
-        means_direct, log_stds_direct.clamp(-20, 2))
+        means_direct, log_stds_direct.clamp(-200,20))
 
     # actions, log_pis を出力
     return action_pos, log_pi_pos, action_sellect, log_pi_sellect, action_direct, log_pi_direct
@@ -752,6 +742,8 @@ class SAC(Algorithm):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
+    self.seed = seed
+
     # リプレイバッファ．
     self.buffer = ReplayBuffer(
         buffer_size=replay_size,
@@ -806,8 +798,18 @@ class SAC(Algorithm):
     self.batch_num = 0
 
     self.pos_list = list(range(state_shape[0] * state_shape[1]))
-    self.sellect_list = list(range(num_of_cutter))
+    self.sellect_list = list(range(num_of_cutter - 1))
     self.direct_list = list(range(4))
+
+    print(len(self.sellect_list))
+
+    self.max_eq = 0
+
+    self.befor_state = None
+
+    self.max_rew_data = None
+
+    self.send_data_name = None
 
   def is_update(self, steps):
     # 学習初期の一定期間(start_steps)は学習しない．
@@ -816,6 +818,7 @@ class SAC(Algorithm):
   def step(self, env, befor, state, t, steps):
     t += 1
     self.t_global += 1
+    rand = False
 
     # 学習初期の一定期間(start_steps)は，ランダムに行動して多様なデータの収集を促進する
     next_state, reward, done = None, None, None
@@ -830,8 +833,12 @@ class SAC(Algorithm):
       next_state, reward, done, _ = env.step(action)
 
     else:
-      action, _ = self.explore(befor, state, env.goal)
+      if t % 10 == 0:
+          rand = True
+      action, _ = self.explore(befor, state, env.goal, rand = rand)
       next_state, reward, done, _ = env.step(action)
+
+
 
     # ゲームオーバーではなく，最大ステップ数に到達したことでエピソードが終了した場合は，
     # 本来であればその先も試行が継続するはず．よって，終了シグナルをFalseにする
@@ -851,7 +858,8 @@ class SAC(Algorithm):
     self.buffer.append(send_state, send_action, reward,
                        done_masked, send_next_state, send_goal)
 
-    # エピソードが終了した場合には，環境をリセットする．
+
+    # エピソードが終了した場合には，環境をリセットしてファイルを保存および送信．
     if done:
       if t < env._max_episode_steps - 1:
         tmp_array = np.zeros((3, env.state_shape[0], env.state_shape[1]))
@@ -864,6 +872,76 @@ class SAC(Algorithm):
         for _ in range(env._max_episode_steps - t):
           self.buffer.append(empty_states, action, reward,
                              done, empty_next_states, empty_goal, )
+
+       # ひとつ前の結果より良くなったらファイルを保存
+      if self.max_eq is None or self.max_eq < int(env.save_file_name):
+
+        env.ans["n"] = env.best_step
+
+        output = {"n": env.best_step, "ops": []}
+        json_name = None
+
+        for i in range(env.best_step):
+            output["ops"].append(env.ans["ops"][i])
+        
+        print(f"max eq:{self.max_eq}")
+        print(f"env save file name:{env.save_file_name}")
+        print(f"steps : {env.best_step}")
+        sleep(2)
+
+        self.max_eq_data = int(env.save_file_name)
+
+        json_name = f"./solution_{env.save_file_name}.json"
+
+        with open(json_name, 'w') as f:
+            json.dump(output, f, indent=2)
+
+        #env.start, env.board = copy.deepcopy(env.ans_board), copy.deepcopy(env.ans_board)
+
+        # 2回目以降のファイル保存ならば、ファイルを結合してより良い結果に
+        if env.before_file_name is not None and int(env.before_file_name) < int(env.save_file_name):
+            print("do concat")
+            before_json_name = f"./solution_{env.before_file_name}.json"
+            save_data = concat_jsonfile(before_json_name, json_name)
+
+            with open(json_name, 'w') as f:
+                json.dump(save_data, f, indent=4)
+
+
+        
+        if self.send_data_name is None or self.send_data_name <= int(env.save_file_name):
+
+            print(f"send action that eq num is {env.save_file_name}")
+
+            self.send_data_name = env.save_file_name
+                    
+            solution_data = None
+            # solution.json を読み込む
+            with open(json_name, 'r') as f:
+                solution_data = json.load(f)
+                solution_data["n"] -= 1
+
+            # ヘッダーの設定
+            headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+
+
+            # POST リクエストを送信
+            response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
+
+            # レスポンスのステータスコードと内容を確認
+            print("Status Code:", response.status_code)
+            print("Response Text:", response.text)
+        
+
+      if self.max_eq < env.max_eq:
+          print("saving")
+          self.max_eq = env.max_eq
+          model_path = path + 'model_new'
+          torch.save(self.actor.state_dict(), model_path + '_actor')
+          torch.save(self.critic.state_dict(), model_path + '_critic')
+          torch.save(self.critic_target.state_dict(),
+                     model_path + '_critic_target')
+
 
       t = 0
       self.batch_num += 1
@@ -881,11 +959,7 @@ class SAC(Algorithm):
 
     self.update_critic(states, rewards, dones, next_states, goal, env)
 
-    if self.actor_update_count == 1:
-      self.update_actor(states, goal, env)
-      self.actor_update_count = 0
-    else:
-      self.actor_update_count += 1
+    self.update_actor(states, goal, env)
 
     self.update_target()
 
@@ -896,8 +970,8 @@ class SAC(Algorithm):
     next_actions, log_pis = self.explore(
         states, next_states, goal, self.batch_size)
     curr_qs1, curr_qs2 = curr_qs.chunk(2, dim=-1)
-    curr_qs1 = torch.clamp(curr_qs1, min=-10**9, max=10**9)
-    curr_qs2 = torch.clamp(curr_qs2, min=-10**9, max=10**9)
+    curr_qs1 = torch.clamp(curr_qs1, min=-10**5, max=10**5)
+    curr_qs2 = torch.clamp(curr_qs2, min=-10**5, max=10**5)
 
     """
         env.actionはいじらずにここでbatch対応させる。
@@ -924,7 +998,7 @@ class SAC(Algorithm):
     target_qs = rewards * self.reward_scale + \
         (1.0 - dones) * self.gamma * next_qs
 
-    target_qs = torch.clamp(target_qs, min=-10**9, max=10**9)
+    target_qs = torch.clamp(target_qs, min=-10**5, max=10**5)
 
     loss_critic1 = (curr_qs1.mean() - target_qs).pow_(2).mean() / 10**5
     loss_critic2 = (curr_qs2.mean() - target_qs).pow_(2).mean() / 10**5

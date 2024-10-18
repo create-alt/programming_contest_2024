@@ -8,7 +8,7 @@ class transition():
     本クラスはenv(学習環境)として扱うクラスであるので、
     行動に対して次の状態と報酬、実行が終わったかどうかを返す。
     """
-    def __init__(self, board, cutter, goal, frequ=1, test=False, EPISODE_SIZE = 1000, get_actions = None):
+    def __init__(self, board, cutter, goal, frequ=1, EPISODE_SIZE = 1000, get_actions = None):
         """
         board (2次元list)  => 最初に与えられたボードの状態(0~3)
                                 臨時的な値として'-1'は穴抜けを表す
@@ -43,7 +43,7 @@ class transition():
 
         self.before_eq = self.default_eq
 
-        self.num_of_cutter = len(self.cutter)
+        self.num_of_cutter = len(self.cutter) - 1
         self.state_shape  = [len(board), len(board[0])]
         self.action_shape = [4]
 
@@ -56,7 +56,6 @@ class transition():
 
         self.ans_board = None
 
-        self.test = test
         self.before_act = None
 
         self.save_file_name   = None
@@ -91,10 +90,9 @@ class transition():
         if self.num_step == self._max_episode_steps:
             self.done = True
 
-        if self.test:
-            # act[0] = (act[0] * self.x_boardsize) // 256
-            # act[1] = (act[1] * self.y_boardsize) // 256
-            self.ans["ops"].append({"p":act[2], "x":act[0], "y":act[1], "s":act[3]})
+        # act[0] = (act[0] * self.x_boardsize) // 256
+        # act[1] = (act[1] * self.y_boardsize) // 256
+        self.ans["ops"].append({"p":act[2], "x":act[0], "y":act[1], "s":act[3]})
 
         self.before_act = copy.deepcopy(act)
 
@@ -108,7 +106,7 @@ class transition():
 
       # cutterのサイズと型抜き座標を定数として格納
       X_SIZE, Y_SIZE = len(cutter), len(cutter[0])
-      X, Y = pos[0], pos[1]
+      X, Y = int(pos[0]), int(pos[1])
       x_boardsize, y_boardsize = len(board), len(board[0])
 
       # cut_valを動的に確保 (メモリの無駄を避けるため、必要サイズだけ確保)
@@ -212,27 +210,16 @@ class transition():
         # 報酬計算
         # progress = (num_eq - self.default_eq) / total_pieces
         # this_rew = progress * 100  # 進捗に基づいた報酬
-        this_rew = ((num_eq - self.before_eq) / total_pieces) * 1000
+        this_rew = (num_eq / total_pieces) * 1000
 
         if self.before_eq < num_eq:
             self.before_eq = num_eq
-
-        # # 一致数が減少してもペナルティは軽減する
-        # if num_eq < self.before_eq:
-        #     this_rew -= 5  # 一時的な減少に対して軽いペナルティ
 
         # 全一致時の大きな報酬
         if num_eq == total_pieces:
             this_rew += 1000  # 全一致時のボーナス
             self.done = True
 
-        # # 一致数が改善している場合は報酬を増加
-        # if num_eq > self.before_eq:
-        #     this_rew += 50  # 改善が見られる場合のボーナス
-
-        # # 前回の一致数を更新
-        # self.num_eq = num_eq / total_pieces
-        # self.before_eq = num_eq
 
         # デバッグ用の表示
         if self.num_step % 100 == 0:
@@ -257,18 +244,24 @@ class transition():
         # self.board = copy.deepcopy(self.start)
 
         #訓練用の処理（本当に学習に対応できているか怪しいので要検証）
-        if self.ans_board is not None:
-            self.board = copy.deepcopy(self.ans_board) #訓練用
-        else:
-            self.board = copy.deepcopy(self.start)
-
-        self.board = copy.deepcopy(self.start)
 
         # self.default_eq = self.max_eq
+        self.board = copy.deepcopy(self.start)
 
         self.before_eq = self.max_eq
+        self.max_eq = 0
 
-        self.before_file_name = self.save_file_name
+        if self.save_file_name is not None and self.before_file_name is not None and int(self.before_file_name) < int(self.save_file_name):
+            self.before_file_name = self.save_file_name
+
+            #if self.ans_board is not None:
+            #    self.board = copy.deepcopy(self.ans_board) #訓練用
+            #else:
+            #    self.board = copy.deepcopy(self.start)
+
+        else:
+            self.before_file_name = None
+
         self.save_file_name = None
         
 
@@ -279,7 +272,6 @@ class transition():
         self.before_rew = 0
 
         self.max_rew = -10000
-        self.max_eq  = -1
         self.num_eq = 0
         self.best_step = 0
         self.before_act = None
@@ -295,7 +287,6 @@ class transition():
     def action_sample(self):
         """
         ランダムにactionを出力する
-        出力するactionの形式は、[256, 256, num_of_cutter, 4]
         """
 
         action = []

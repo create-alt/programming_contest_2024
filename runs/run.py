@@ -44,21 +44,19 @@ else:
 start = data["board"]["start"]
 goal = data["board"]["goal"]
 
-H, W = data["board"]["height"], data["board"]["width"]
 
-board_train, board_test, goal_train, goal_test = [], [], [], []
+H, W = int(data["board"]["height"]), int(data["board"]["width"])
+
+tmp_start, tmp_goal = [], []
 for i in range(H):
-  board_train.append([])
-  board_test.append([])
-  goal_train.append([])
-  goal_test.append([])
-  for j in range(W):
+    tmp_start.append([])
+    tmp_goal.append([])
+    for j in range(W):
+        tmp_start[i].append(int(start[i][j]))
+        tmp_goal[i].append(int(goal[i][j]))
 
-    board_train[i].append(int(start[i][j]))
-    board_test[i].append(int(start[i][j]))
-
-    goal_train[i].append(int(goal[i][j]))
-    goal_test[i].append(int(goal[i][j]))
+start = copy.deepcopy(tmp_start)
+goal  = copy.deepcopy(tmp_goal)
 
 
 # 定型抜き型を作成
@@ -118,7 +116,7 @@ for num in range(data["general"]["n"]):
 """
 REWARD_SCALE = 0.9
 NUM_STEPS = 10 ** 5
-BATCH_SIZE = 200
+BATCH_SIZE = 400
 EVAL_INTERVAL = BATCH_SIZE * 10
 
 random.seed(2)
@@ -132,9 +130,7 @@ for i in range(len(start)):
 print(count)
 
 # 以下の引数は学習・テストデータであり、別で作成・形成を行う
-env = transition(board_train, cutter, goal_train, EPISODE_SIZE=BATCH_SIZE)
-env_test = transition(board_test, cutter, goal_test,
-                      test=True, EPISODE_SIZE=BATCH_SIZE)
+env = transition(start, cutter, goal, EPISODE_SIZE=BATCH_SIZE)
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -158,11 +154,9 @@ algo = SAC(
 
 trainer = Trainer(
     env=env,
-    env_test=env_test,
     algo=algo,
     seed=SEED,
     num_steps=NUM_STEPS,
-    eval_interval=EVAL_INTERVAL,
 )
 
 trainer.train()
