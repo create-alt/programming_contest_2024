@@ -14,7 +14,7 @@ from model import SAC, Trainer
 from Env import transition
 from create_board import create_train_board
 
-SEED = 0
+SEED = 100
 random.seed(SEED)
 host_name = "http://localhost:8080"
 
@@ -115,7 +115,6 @@ for _ in range(data["general"]["n"]):
 """
 環境とネットワークのインスタンス生成と訓練の開始
 """
-SEED = 20
 REWARD_SCALE = 0.9
 NUM_STEPS = 10 ** 5
 BATCH_SIZE = 200
