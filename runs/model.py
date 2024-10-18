@@ -204,9 +204,9 @@ class Algorithm(ABC):
     """ 確率論的な行動と，その行動の確率密度の対数 \log(\pi(a|s)) を返す． 
         本メソッドに関しても基本はexploitのように決定的にしてみてもよいかもしれない
     """
-    if befor[0] is None:
-      print(state[0].shape)
-      befor[0] = torch.zeros_like(torch.tensor(state[0]))
+    if befor is None:
+      befor = torch.zeros(torch.tensor(state).shape)
+      print(torch.tensor(state).shape)
 
     state = torch.tensor(state, dtype=torch.float,
                          device=self.device).clone().detach().unsqueeze_(0)
@@ -232,9 +232,15 @@ class Algorithm(ABC):
           action_pos[i].view(-1).detach().cpu().numpy().tolist()))[0])
       else:
         action_pos_list.append(torch.argmax(action_pos[i].view(1, -1), dim=-1).cpu().numpy())
+      
 
-      action_pos_x.append(action_pos_list[i] // len(state[0]))
-      action_pos_y.append(action_pos_list[i] % len(state[0][0]))
+      action_pos_x.append(int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1)))
+      action_pos_y.append(int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1)))
+
+      if int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1)) >= 6:
+          print("x_error")
+      if int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1)) >= 4:
+          print("y_error")
 
     action_sellect_list = []
     action_direct_list = []
@@ -299,9 +305,12 @@ class Algorithm(ABC):
             torch.min(action_sellect.view(-1))) + 1e-3, action_direct + abs(torch.min(action_direct.view(-1))) + 1e-3
         action_pos = torch.argmax(action_pos.view(1, -1), dim=-1).cpu().numpy()
         # print(f"action_pos = {action_pos}")
+        print(len(state))
+        print(len(state[0]))
+        print(len(state[0][0]))
 
-        action_pos_x = action_pos // len(state[0])
-        action_pos_y = action_pos % len(state[0][0])
+        action_pos_x = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1))
+        action_pos_y = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1))
 
         # print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
 
@@ -323,8 +332,12 @@ class Algorithm(ABC):
 
         # print(f"action_pos = {action_pos}")
 
-        action_pos_x = action_pos // len(state[0])
-        action_pos_y = action_pos % len(state[0][0])
+        print(len(state))
+        print(len(state[0]))
+        print(len(state[0][0]))
+
+        action_pos_x = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1))
+        action_pos_y = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1))
 
         # print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
 
@@ -801,6 +814,11 @@ class SAC(Algorithm):
     self.sellect_list = list(range(num_of_cutter - 1))
     self.direct_list = list(range(4))
 
+    self.state_shape = state_shape
+    print(state_shape)
+
+    print(len(self.pos_list))
+
     print(len(self.sellect_list))
 
     self.max_eq = 0
@@ -828,9 +846,9 @@ class SAC(Algorithm):
       next_state, reward, done, _ = env.step(action)
       reward += 5000
 
-    elif steps <= self.start_steps:
-      action = env.action_sample()
-      next_state, reward, done, _ = env.step(action)
+    #elif steps <= self.start_steps:
+    # action = env.action_sample()
+    #  next_state, reward, done, _ = env.step(action)
 
     else:
       if t % 10 == 0:
@@ -909,7 +927,7 @@ class SAC(Algorithm):
 
 
         
-        if self.send_data_name is None or self.send_data_name <= int(env.save_file_name):
+        if self.send_data_name is None or int(self.send_data_name) <= int(env.save_file_name):
 
             print(f"send action that eq num is {env.save_file_name}")
 

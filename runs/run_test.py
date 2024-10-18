@@ -70,8 +70,8 @@ algo = SAC(
     replay_size=BATCH_SIZE*3,
     start_steps=BATCH_SIZE,
     tau=1e-3,
-    pretrain = True,
-    model_weight_name = 'model_new'
+    #pretrain = True,
+    #model_weight_name = 'model_new'
 )
 
 trainer = Trainer(
