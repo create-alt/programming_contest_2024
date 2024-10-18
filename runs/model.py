@@ -23,7 +23,7 @@ from torchvision import models
 from func import *
 
 
-path = "../model_weights/"
+path = ""
 host_name = "http://localhost:8080"
 
 

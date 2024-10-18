@@ -101,14 +101,15 @@ for size in [2, 4, 8, 16, 32, 64, 128, 256]:
 # cutterに一般抜き型を追加する
 cutters = data["general"]["patterns"]
 
-for _ in range(data["general"]["n"]):
-  cut_info = cutters[i]
+for num in range(data["general"]["n"]):
+  cut_info = cutters[num]
   grid = []
   for i in range(cut_info["height"]):
     grid.append([])
     for j in range(cut_info["width"]):
       grid[i].append(int(cut_info["cells"][i][j]))
 
+  cutter.append(grid)
 
 """### 学習の開始"""
 

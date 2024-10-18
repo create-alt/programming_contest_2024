@@ -52,9 +52,9 @@ print(count)
 
 # 以下の引数は学習・テストデータであり、別で作成・形成を行う
 env = transition(board_train, cutter, goal_train,
-                 EPISODE_SIZE=BATCH_SIZE, get_actions=get_actions)
+                 EPISODE_SIZE=BATCH_SIZE, get_actions=None)
 env_test = transition(board_test, cutter, goal_test, test=True,
-                      EPISODE_SIZE=BATCH_SIZE, get_actions=get_actions)
+                      EPISODE_SIZE=BATCH_SIZE, get_actions=None)
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -69,7 +69,7 @@ algo = SAC(
     batch_size=BATCH_SIZE,
     lr_actor=5e-4,
     lr_critic=5e-4,
-    replay_size=4 * 10**3,
+    replay_size=10**3,
     start_steps=BATCH_SIZE,
     tau=1e-3,
     # pretrain = True,
