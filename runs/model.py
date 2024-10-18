@@ -94,14 +94,16 @@ class Trainer:
 
         if self.max_eq < self.env_test.max_eq:
           self.max_eq = self.env_test.max_eq
-          model_path = path + f'model_{self.env_test.max_eq},{self.env_test.state_shape[0] * self.env_test.state_shape[1]}'
+          model_path = path + f'model_{self.env_test.max_eq},{
+              self.env_test.state_shape[0] * self.env_test.state_shape[1]}'
           torch.save(self.algo.actor.state_dict(), model_path + '_actor')
           torch.save(self.algo.critic.state_dict(), model_path + '_critic')
           torch.save(self.algo.critic_target.state_dict(),
                      model_path + '_critic_target')
 
         elif steps == self.num_steps:
-          model_path = path + f'model_{self.env_test.max_eq},{self.env_test.state_shape[0] * self.env_test.state_shape[1]}_last'
+          model_path = path + f'model_{self.env_test.max_eq},{
+              self.env_test.state_shape[0] * self.env_test.state_shape[1]}_last'
           torch.save(self.algo.actor.state_dict(), model_path + '_actor')
           torch.save(self.algo.critic.state_dict(), model_path + '_critic')
           torch.save(self.algo.critic_target.state_dict(),
@@ -111,7 +113,7 @@ class Trainer:
     """ 複数エピソード環境を動かし，平均収益を記録する． """
 
     state = self.env_test.reset()
-    self.env_test.num_step = -200
+    self.env_test.num_step = 0
     befor = None
     done = False
     total_reward = 0
@@ -139,21 +141,21 @@ class Trainer:
     print(f"total reward   is {total_reward}")
     print(f"max reward     is {self.env_test.max_rew}")
     print(f"max eq         is {self.env_test.max_eq}")
-    print(f"best step      is {self.env_test.best_step + 200}")
+    print(f"best step      is {self.env_test.best_step}")
     print(f"evalueate time is {self.time}")
 
     self.returns['step'].append(steps)
     self.returns['return'].append(self.env_test.max_rew)
-    self.returns['best_step'].append(self.env_test.best_step + 200)
+    self.returns['best_step'].append(self.env_test.best_step)
 
     sleep(2)
-    #plot_board(self.env_test.ans_board)
+    # plot_board(self.env_test.ans_board)
 
-    self.env_test.ans["n"] = self.env_test.best_step + 200
+    self.env_test.ans["n"] = self.env_test.best_step
 
-    output = {"n": self.env_test.best_step + 200, "ops": []}
+    output = {"n": self.env_test.best_step, "ops": []}
 
-    for i in range(self.env_test.best_step + 200):
+    for i in range(self.env_test.best_step):
       output["ops"].append(self.env_test.ans["ops"][i])
 
     # ひとつ前の結果より良くなったらファイルを保存
@@ -415,10 +417,12 @@ class SACActor(nn.Module):
   抜き型のサイズごとに
   """
 
-  def __init__(self, num_of_cutter):
+  def __init__(self, num_of_cutter, device):
     super().__init__()
 
     self.num_of_cutter = num_of_cutter
+
+    self.device = device
 
     """
         Unetを使用してネットワークを一つだけに絞る
@@ -468,13 +472,13 @@ class SACActor(nn.Module):
 
       if state.shape[2] < 64:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], 64 - state.shape[2], state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], 64 - state.shape[2], state.shape[3]).to(self.device)
       elif state.shape[2] < 128:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], 128 - state.shape[2], state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], 128 - state.shape[2], state.shape[3]).to(self.device)
       elif state.shape[2] < 256:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], 256 - state.shape[2], state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], 256 - state.shape[2], state.shape[3]).to(self.device)
 
       state = torch.cat([state, zero], dim=2)
 
@@ -482,13 +486,13 @@ class SACActor(nn.Module):
 
       if state.shape[3] < 64:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], state.shape[2], 64 - state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], state.shape[2], 64 - state.shape[3]).to(self.device)
       elif state.shape[3] < 128:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], state.shape[2], 128 - state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], state.shape[2], 128 - state.shape[3]).to(self.device)
       elif state.shape[3] < 256:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], state.shape[2], 256 - state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], state.shape[2], 256 - state.shape[3]).to(self.device)
 
       state = torch.cat([state, zero], dim=3)
 
@@ -558,13 +562,13 @@ class SACActor(nn.Module):
 
       if state.shape[2] < 64:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], 64 - state.shape[2], state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], 64 - state.shape[2], state.shape[3]).to(self.device)
       elif state.shape[2] < 128:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], 128 - state.shape[2], state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], 128 - state.shape[2], state.shape[3]).to(self.device)
       elif state.shape[2] < 256:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], 256 - state.shape[2], state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], 256 - state.shape[2], state.shape[3]).to(self.device)
 
       state = torch.cat([state, zero], dim=2)
 
@@ -572,13 +576,13 @@ class SACActor(nn.Module):
 
       if state.shape[3] < 64:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], state.shape[2], 64 - state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], state.shape[2], 64 - state.shape[3]).to(self.device)
       elif state.shape[3] < 128:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], state.shape[2], 128 - state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], state.shape[2], 128 - state.shape[3]).to(self.device)
       elif state.shape[3] < 256:
         zero = torch.zeros(
-            state.shape[0], state.shape[1], state.shape[2], 256 - state.shape[3]).to("cuda")
+            state.shape[0], state.shape[1], state.shape[2], 256 - state.shape[3]).to(self.device)
 
       state = torch.cat([state, zero], dim=3)
 
@@ -758,9 +762,8 @@ class SAC(Algorithm):
     )
 
     # Actor-Criticのネットワークを構築する．
-    self.actor = SACActor(
-        num_of_cutter=num_of_cutter
-    ).to(device)
+    self.actor = SACActor(num_of_cutter=num_of_cutter,
+                          device=device).to(device)
 
     self.critic = SACCritic().to(device)
 
@@ -850,6 +853,18 @@ class SAC(Algorithm):
 
     # エピソードが終了した場合には，環境をリセットする．
     if done:
+      if t < env._max_episode_steps - 1:
+        tmp_array = np.zeros((3, env.state_shape[0], env.state_shape[1]))
+
+        empty_states, empty_next_states, empty_goal = np.split(tmp_array, 3, 0)
+        action = np.array([0, 0, 0, 0]).astype(float)
+        reward = np.array(0).astype(float)
+        done = True
+
+        for _ in range(env._max_episode_steps - t):
+          self.buffer.append(empty_states, action, reward,
+                             done, empty_next_states, empty_goal, )
+
       t = 0
       self.batch_num += 1
       next_state = env.reset()
@@ -920,7 +935,7 @@ class SAC(Algorithm):
 
     self.optim_critic.zero_grad()
 
-    (loss_critic1 + loss_critic2).mean().backward(retain_graph=True)
+    (loss_critic1 + loss_critic2).mean().backward(retain_graph=False)
 
     """
     for name, param in self.critic.named_parameters():
@@ -971,7 +986,7 @@ class SAC(Algorithm):
     act_end = time()
 
     qs = self.critic(states, next_states, goal, batch_size=self.batch_size)
-    loss_actor1, loss_actor2 = 0, 0
+    # loss_actor1, loss_actor2 = 0, 0
     # if ans_act is not None:
     #   for i in range(len(actions)):
     #     cutter_is, direct_is = 0, 0
@@ -992,7 +1007,7 @@ class SAC(Algorithm):
     print(f"actor loss1 = {loss_actor}")
 
     self.optim_actor.zero_grad()
-    loss_actor.backward(retain_graph=True)
+    loss_actor.backward(retain_graph=False)
 
     """
     for name, param in self.critic.named_parameters():
