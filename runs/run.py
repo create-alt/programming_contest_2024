@@ -16,7 +16,8 @@ from create_board import create_train_board
 
 SEED = 100
 random.seed(SEED)
-host_name = "http://localhost:8080"
+# host_name = "http://localhost:8080"
+host_name = "http://172.29.1.2:80"
 
 # 本番前にはここを実行可能にして下の自作部分を隠す
 # ヘッダーの設定
@@ -49,14 +50,14 @@ H, W = int(data["board"]["height"]), int(data["board"]["width"])
 
 tmp_start, tmp_goal = [], []
 for i in range(H):
-    tmp_start.append([])
-    tmp_goal.append([])
-    for j in range(W):
-        tmp_start[i].append(int(start[i][j]))
-        tmp_goal[i].append(int(goal[i][j]))
+  tmp_start.append([])
+  tmp_goal.append([])
+  for j in range(W):
+    tmp_start[i].append(int(start[i][j]))
+    tmp_goal[i].append(int(goal[i][j]))
 
 start = copy.deepcopy(tmp_start)
-goal  = copy.deepcopy(tmp_goal)
+goal = copy.deepcopy(tmp_goal)
 
 
 # 定型抜き型を作成

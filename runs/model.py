@@ -24,7 +24,8 @@ from func import *
 
 
 path = "../model_weights/"
-host_name = "http://localhost:8080"
+# host_name = "http://localhost:8080"
+host_name = "http://172.29.1.2:80"
 
 
 """## 学習用class定義"""
@@ -77,10 +78,8 @@ class Trainer:
 
       # アルゴリズムが準備できていれば，1回学習を行う．
       if self.algo.is_update(steps):
-          for _ in range(1):
-            self.algo.update(self.env)
-
-        
+        for _ in range(1):
+          self.algo.update(self.env)
 
   def evaluate(self, steps):
     """ 複数エピソード環境を動かし，平均収益を記録する． """
@@ -153,24 +152,24 @@ class Trainer:
         if self.send_data_name is None:
           self.send_data_name = self.env.save_file_name
 
-        
         if int(self.send_data_name) <= int(self.env.save_file_name):
 
-            self.send_data_name = self.env.save_file_name
-                    
-            # solution.json を読み込む
-            with open(json_name, 'r') as f:
-                solution_data = json.load(f)
+          self.send_data_name = self.env.save_file_name
 
-            # ヘッダーの設定
-            headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+          # solution.json を読み込む
+          with open(json_name, 'r') as f:
+            solution_data = json.load(f)
 
-            # POST リクエストを送信
-            response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
+          # ヘッダーの設定
+          headers = {"Content-Type": "application/json",
+                     "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
 
-            # レスポンスのステータスコードと内容を確認
-            print("Status Code:", response.status_code)
-        
+          # POST リクエストを送信
+          response = requests.post(
+              host_name + "/answer", headers=headers, json=solution_data)
+
+          # レスポンスのステータスコードと内容を確認
+          print("Status Code:", response.status_code)
 
   def plot_return(self):
     """ 平均収益のグラフを描画する． """
@@ -200,7 +199,7 @@ class Trainer:
 
 class Algorithm(ABC):
 
-  def explore(self, befor, state, goal, batch_size=1, rand = False):
+  def explore(self, befor, state, goal, batch_size=1, rand=False):
     """ 確率論的な行動と，その行動の確率密度の対数 \log(\pi(a|s)) を返す． 
         本メソッドに関しても基本はexploitのように決定的にしてみてもよいかもしれない
     """
@@ -229,18 +228,20 @@ class Algorithm(ABC):
 
       if not rand:
         action_pos_list.append(random.choices(self.pos_list, k=1, weights=mySqueeze(
-          action_pos[i].view(-1).detach().cpu().numpy().tolist()))[0])
+            action_pos[i].view(-1).detach().cpu().numpy().tolist()))[0])
       else:
-        action_pos_list.append(torch.argmax(action_pos[i].view(1, -1), dim=-1).cpu().numpy())
-      
+        action_pos_list.append(torch.argmax(
+            action_pos[i].view(1, -1), dim=-1).cpu().numpy())
 
-      action_pos_x.append(int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1)))
-      action_pos_y.append(int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1)))
+      action_pos_x.append(int(
+          action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[1] - 1)))
+      action_pos_y.append(int(
+          action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[0] - 1)))
 
-      if int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1)) >= 6:
-          print("x_error")
-      if int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1)) >= 4:
-          print("y_error")
+      if int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[1] - 1)) >= 6:
+        print("x_error")
+      if int(action_pos_list[i] / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[0] - 1)) >= 4:
+        print("y_error")
 
     action_sellect_list = []
     action_direct_list = []
@@ -249,27 +250,31 @@ class Algorithm(ABC):
       for i in range(batch_size):
 
         if not rand:
-            action_sellect_list.append(random.choices(self.sellect_list, k=1, weights=mySqueeze(
-                action_sellect[i].cpu().detach().numpy().tolist()))[0])
-            action_direct_list.append(random.choices(self.direct_list, k=1, weights=mySqueeze(
-                action_direct[i].cpu().detach().numpy().tolist()))[0])
+          action_sellect_list.append(random.choices(self.sellect_list, k=1, weights=mySqueeze(
+              action_sellect[i].cpu().detach().numpy().tolist()))[0])
+          action_direct_list.append(random.choices(self.direct_list, k=1, weights=mySqueeze(
+              action_direct[i].cpu().detach().numpy().tolist()))[0])
 
         else:
-            action_sellect_list.append(torch.argmax(action_sellect[i], dim=-1).cpu().numpy())
+          action_sellect_list.append(torch.argmax(
+              action_sellect[i], dim=-1).cpu().numpy())
 
-            action_direct_list.append(torch.argmax(action_direct[i], dim=-1).cpu().numpy())
+          action_direct_list.append(torch.argmax(
+              action_direct[i], dim=-1).cpu().numpy())
 
     else:
 
       if not rand:
-          action_sellect_list = random.choices(self.sellect_list, k=1, weights=mySqueeze(
-              action_sellect.cpu().detach().numpy().tolist()))[0]
-          action_direct_list = random.choices(self.direct_list, k=1, weights=mySqueeze(
-              action_direct.cpu().detach().numpy().tolist()))[0]
+        action_sellect_list = random.choices(self.sellect_list, k=1, weights=mySqueeze(
+            action_sellect.cpu().detach().numpy().tolist()))[0]
+        action_direct_list = random.choices(self.direct_list, k=1, weights=mySqueeze(
+            action_direct.cpu().detach().numpy().tolist()))[0]
       else:
-          action_sellect_list.append(torch.argmax(action_sellect, dim=-1).cpu().numpy())
+        action_sellect_list.append(torch.argmax(
+            action_sellect, dim=-1).cpu().numpy())
 
-          action_direct_list.append(torch.argmax(action_direct, dim=-1).cpu().numpy())
+        action_direct_list.append(torch.argmax(
+            action_direct, dim=-1).cpu().numpy())
 
     if batch_size != 1:
       action = [[action_pos_x[i], action_pos_y[i], action_sellect_list[i],
@@ -309,8 +314,10 @@ class Algorithm(ABC):
         print(len(state[0]))
         print(len(state[0][0]))
 
-        action_pos_x = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1))
-        action_pos_y = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1))
+        action_pos_x = int(
+            action_pos / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[1] - 1))
+        action_pos_y = int(
+            action_pos / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[0] - 1))
 
         # print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
 
@@ -336,8 +343,10 @@ class Algorithm(ABC):
         print(len(state[0]))
         print(len(state[0][0]))
 
-        action_pos_x = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[1]-1))
-        action_pos_y = int(action_pos / (self.state_shape[0] * self.state_shape[1]) *(self.state_shape[0]-1))
+        action_pos_x = int(
+            action_pos / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[1] - 1))
+        action_pos_y = int(
+            action_pos / (self.state_shape[0] * self.state_shape[1]) * (self.state_shape[0] - 1))
 
         # print(f"act_x = {action_pos_x}, act_y = {action_pos_y}")
 
@@ -522,7 +531,7 @@ class SACActor(nn.Module):
         x_sellect_direction).chunk(2, dim=-1)[0]
 
     return_sellect = torch.tanh(return_sellect)[
-        0][0:self.num_of_cutter-1].unsqueeze_(0)
+        0][0:self.num_of_cutter - 1].unsqueeze_(0)
 
     return_direct = torch.tanh(return_direct)
 
@@ -607,7 +616,8 @@ class SACActor(nn.Module):
     x_sellect_direction = self.gap(state).view(batch_size, -1)
     means_sellect, log_stds_sellect = self.linear_sellect(
         x_sellect_direction).chunk(2, dim=-1)
-    means_sellect, log_stds_sellect = means_sellect[:,0:self.num_of_cutter-1], log_stds_sellect[:, 0:self.num_of_cutter-1]
+    means_sellect, log_stds_sellect = means_sellect[:,
+                                                    0:self.num_of_cutter - 1], log_stds_sellect[:, 0:self.num_of_cutter - 1]
     means_direct, log_stds_direct = self.linear_direction(
         x_sellect_direction).chunk(2, dim=-1)
 
@@ -632,11 +642,11 @@ class SACActor(nn.Module):
         batch_size, 2 * befor.shape[-2] * befor.shape[-1]).chunk(2, dim=-1)
 
     action_pos, log_pi_pos = reparameterize(
-        means_pos, log_stds_pos.clamp(-200,20))
+        means_pos, log_stds_pos.clamp(-200, 20))
     action_sellect, log_pi_sellect = reparameterize(
-        means_sellect, log_stds_sellect.clamp(-200,20))
+        means_sellect, log_stds_sellect.clamp(-200, 20))
     action_direct, log_pi_direct = reparameterize(
-        means_direct, log_stds_direct.clamp(-200,20))
+        means_direct, log_stds_direct.clamp(-200, 20))
 
     # actions, log_pis を出力
     return action_pos, log_pi_pos, action_sellect, log_pi_sellect, action_direct, log_pi_direct
@@ -846,17 +856,15 @@ class SAC(Algorithm):
       next_state, reward, done, _ = env.step(action)
       reward += 5000
 
-    #elif steps <= self.start_steps:
+    # elif steps <= self.start_steps:
     # action = env.action_sample()
     #  next_state, reward, done, _ = env.step(action)
 
     else:
       if t % 10 == 0:
-          rand = True
-      action, _ = self.explore(befor, state, env.goal, rand = rand)
+        rand = True
+      action, _ = self.explore(befor, state, env.goal, rand=rand)
       next_state, reward, done, _ = env.step(action)
-
-
 
     # ゲームオーバーではなく，最大ステップ数に到達したことでエピソードが終了した場合は，
     # 本来であればその先も試行が継続するはず．よって，終了シグナルをFalseにする
@@ -875,7 +883,6 @@ class SAC(Algorithm):
     # リプレイバッファにデータを追加する．
     self.buffer.append(send_state, send_action, reward,
                        done_masked, send_next_state, send_goal)
-
 
     # エピソードが終了した場合には，環境をリセットしてファイルを保存および送信．
     if done:
@@ -900,8 +907,8 @@ class SAC(Algorithm):
         json_name = None
 
         for i in range(env.best_step):
-            output["ops"].append(env.ans["ops"][i])
-        
+          output["ops"].append(env.ans["ops"][i])
+
         print(f"max eq:{self.max_eq}")
         print(f"env save file name:{env.save_file_name}")
         print(f"steps : {env.best_step}")
@@ -912,54 +919,50 @@ class SAC(Algorithm):
         json_name = f"./solution_{env.save_file_name}.json"
 
         with open(json_name, 'w') as f:
-            json.dump(output, f, indent=2)
+          json.dump(output, f, indent=2)
 
-        #env.start, env.board = copy.deepcopy(env.ans_board), copy.deepcopy(env.ans_board)
+        # env.start, env.board = copy.deepcopy(env.ans_board), copy.deepcopy(env.ans_board)
 
         # 2回目以降のファイル保存ならば、ファイルを結合してより良い結果に
         if env.before_file_name is not None and int(env.before_file_name) < int(env.save_file_name):
-            print("do concat")
-            before_json_name = f"./solution_{env.before_file_name}.json"
-            save_data = concat_jsonfile(before_json_name, json_name)
+          print("do concat")
+          before_json_name = f"./solution_{env.before_file_name}.json"
+          save_data = concat_jsonfile(before_json_name, json_name)
 
-            with open(json_name, 'w') as f:
-                json.dump(save_data, f, indent=4)
+          with open(json_name, 'w') as f:
+            json.dump(save_data, f, indent=4)
 
-
-        
         if self.send_data_name is None or int(self.send_data_name) <= int(env.save_file_name):
 
-            print(f"send action that eq num is {env.save_file_name}")
+          print(f"send action that eq num is {env.save_file_name}")
 
-            self.send_data_name = env.save_file_name
-                    
-            solution_data = None
-            # solution.json を読み込む
-            with open(json_name, 'r') as f:
-                solution_data = json.load(f)
-                solution_data["n"] -= 1
+          self.send_data_name = env.save_file_name
 
-            # ヘッダーの設定
-            headers = {"Content-Type": "application/json", "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+          solution_data = None
+          # solution.json を読み込む
+          with open(json_name, 'r') as f:
+            solution_data = json.load(f)
 
+          # ヘッダーの設定
+          headers = {"Content-Type": "application/json",
+                     "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
 
-            # POST リクエストを送信
-            response = requests.post(host_name + "/answer", headers=headers, json=solution_data)
+          # POST リクエストを送信
+          response = requests.post(
+              host_name + "/answer", headers=headers, json=solution_data)
 
-            # レスポンスのステータスコードと内容を確認
-            print("Status Code:", response.status_code)
-            print("Response Text:", response.text)
-        
+          # レスポンスのステータスコードと内容を確認
+          print("Status Code:", response.status_code)
+          print("Response Text:", response.text)
 
       if self.max_eq < env.max_eq:
-          print("saving")
-          self.max_eq = env.max_eq
-          model_path = path + 'model_new'
-          torch.save(self.actor.state_dict(), model_path + '_actor')
-          torch.save(self.critic.state_dict(), model_path + '_critic')
-          torch.save(self.critic_target.state_dict(),
-                     model_path + '_critic_target')
-
+        print("saving")
+        self.max_eq = env.max_eq
+        model_path = path + 'model_new'
+        torch.save(self.actor.state_dict(), model_path + '_actor')
+        torch.save(self.critic.state_dict(), model_path + '_critic')
+        torch.save(self.critic_target.state_dict(),
+                   model_path + '_critic_target')
 
       t = 0
       self.batch_num += 1
