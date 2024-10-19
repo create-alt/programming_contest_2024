@@ -11,7 +11,7 @@ using json = nlohmann::json;
 using namespace std;
 
 std::vector<std::vector<std::vector<int>>> cutter = {{{1}}};
-int use_cutter_basic_number = 19; // ここをいじると全一致しなくなる場合があるので注意
+int use_cutter_basic_number = 19; // ここをいじると全一致しなくなるので注意
 
 void print_board(vector<vector<int>> &grid)
 {
@@ -259,7 +259,6 @@ void main_algo()
                     if (y_sel == y && x_sel <= x)
                         continue;
 
-                    // 今のところ動かなくなるが、修正すればもしかしたら、、
                     // 以下は幅優先にすることで無駄な計算を省ける
                     for (int i = y_sel; i < board.size(); i++)
                     {
