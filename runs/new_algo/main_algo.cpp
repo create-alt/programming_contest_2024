@@ -233,8 +233,8 @@ void main_algo()
             }
 
             int goal_piece = goal[y][x];
-            cout << "goal : " << goal_piece;
-            cout << board[y][x] << "x: " << x << " y: " << y << endl;
+            // cout << "goal : " << goal_piece;
+            // cout << board[y][x] << "x: " << x << " y: " << y << endl;
 
             //(x,y)に寄せるピースを探索
             for (int y_sel = y; y_sel < board.size(); y_sel++)
@@ -264,51 +264,117 @@ void main_algo()
                             act[2] = y_sel;
                             act[3] = 3;
 
-                            cout << "1act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                            cout << x_sel << " " << y_sel << endl;
-                            cout << "raw_num is " << x - x_sel << endl;
+                            // cout << "1act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
+                            // cout << x_sel << " " << y_sel << endl;
+                            // cout << "raw_num is " << x - x_sel << endl;
 
-                            for (int _ = 0; _ < x - x_sel; _++)
+                            int move_length = x - x_sel;
+                            int times = 0;
+                            for(int i=1; i<128; i*=2){
+                                if(move_length >= 128 / i){
+                                    act[0] = 19 - 3*times;
+                                    n++;
+                                    ops.push_back(act);         // vector: opsに行動を記録
+                                    board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
+                                    move_length -= 128 / i; //ここにcutterがboardからはみ出た時の処理が必要
+
+                                    if( (x + (128 / i)) >= board[0].size()){
+                                        move_length += (x + (128 / i)) - board[0].size();
+                                    }
+                                }
+                                times++;
+
+                            }
+                           
+
+                            for (int _ = 0; _ < move_length; _++)
                             {
+                                act[0] = 0;
+
                                 n++;
                                 ops.push_back(act);         // vector: opsに行動を記録
                                 board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
                             }
                         }
 
-                        for (int _ = 0; _ < y_sel - y; _++)
-                        {
+                        int move_length2 = y_sel - y;
+
+                        if(move_length2 > 0){
                             // cout << y_sel << endl;
                             act[1] = x; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[2] = y; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[3] = 0; // 移動方向：上
-                            n++;        // 手数を更新
 
                             if (x < x_sel)
                                 act[1] = x_sel;
 
-                            ops.push_back(act);         // vector: opsに行動を記録
-                            board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
-                            cout << "2act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                            cout << x_sel << " " << y_sel << endl;
+                            
+                            int times = 0;
+                            for(int i=1; i<128; i*=2){
+                                
+                                if(move_length2 >= 128 / i){
+                                    act[0] = 19 - 3*times;
+                                    n++;
+                                    ops.push_back(act);         // vector: opsに行動を記録
+                                    board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
+                                    move_length2 -= 128 / i;
+                                    
+                                    if ((y + (128 / i)) >= board.size()){
+                                        move_length2 += (y + (128 / i)) - board.size();
+                                    }
+                                }
+                                times++;
+                            }
+
+                            for (int _ = 0; _ < move_length2; _++)
+                            {
+                                act[0] = 0;
+                                ops.push_back(act);         // vector: opsに行動を記録
+                                board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
+                                // cout << "2act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
+                                // cout << x_sel << " " << y_sel << endl;
+                            }
+
                         }
 
-                        for (int _ = 0; _ < x_sel - x; _++)
-                        {
+                        
+                        int move_length3 = x_sel - x;
+
+                        if(move_length3 > 0){
                             act[1] = x; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[2] = y; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[3] = 2; // 移動方向：左
-                            n++;        // 手数を更新
 
-                            ops.push_back(act);         // vector: opsに行動を記録
-                            board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
+                            int times = 0;
+                            for(int i=1; i<128; i*=2){
+                                
+                                if(move_length3 >= 128 / i){
+                                    act[0] = 19 - 3*times;
+                                    n++;
+                                    ops.push_back(act);         // vector: opsに行動を記録
+                                    board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
+                                    move_length3 -= 128 / i;
+                                    
+                                    if ((x + (128 / i)) >= board[0].size()){
+                                        move_length3 += (x + (128 / i)) - board[0].size();
+                                    }
+                                }
+                                times++;
+                            }
+                            for (int _ = 0; _ < move_length3; _++)
+                            {
+                                act[0] = 0;
+                                ops.push_back(act);         // vector: opsに行動を記録
+                                board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
 
-                            cout << "3act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                            cout << x_sel << " " << y_sel << endl;
+                                // cout << "3act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
+                                // cout << x_sel << " " << y_sel << endl;
+                            }
                         }
+                        
 
-                        cout << endl;
-                        print_board(board);
+                        // cout << endl;
+                        // print_board(board);
 
                         quit = true;
                         break;
@@ -347,7 +413,7 @@ int main()
             std::vector<int> row;
             for (int j = 0; j < size; ++j)
             {
-                row.push_back((j % 2 == 0) ? 1 : 0);
+                row.push_back((i % 2 == 0) ? 1 : 0);
             }
             grid.push_back(row);
         }
@@ -360,7 +426,7 @@ int main()
             std::vector<int> row;
             for (int j = 0; j < size; ++j)
             {
-                row.push_back((i % 2 == 0) ? 1 : 0);
+                row.push_back((j % 2 == 0) ? 1 : 0);
             }
             grid.push_back(row);
         }
@@ -406,6 +472,8 @@ int main()
     vector<string> get_board = recieve_json["board"]["start"];
 
     vector<string> get_goal = recieve_json["board"]["goal"];
+
+
 
     for (int i = 0; i < get_board.size(); i++)
     {
