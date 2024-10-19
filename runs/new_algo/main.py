@@ -5,9 +5,11 @@ import json
 host_name = "http://localhost:8080"
 # host_name = "http://172.29.1.2:80"
 
+token = "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"
+
 # ヘッダーの設定
 headers = {
-    "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"
+    "Procon-Token": token
 }
 
 # GET リクエストを送信
@@ -31,10 +33,8 @@ else:
 # C++プログラムの実行ファイルを指定して実行
 result = subprocess.run(["./test.exe"], capture_output=True, text=True)
 
-
 # 実行結果を表示
 print(result.stdout)
-print(result.stdout[0])
 
 json_name = "./solution.json"
 
@@ -44,7 +44,7 @@ with open(json_name, 'r') as f:
 
 # ヘッダーの設定
 headers = {"Content-Type": "application/json",
-           "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+           "Procon-Token": token}
 
 # POST リクエストを送信
 response = requests.post(
