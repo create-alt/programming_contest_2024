@@ -11,7 +11,7 @@ using json = nlohmann::json;
 using namespace std;
 
 std::vector<std::vector<std::vector<int>>> cutter = {{{1}}};
-int use_cutter_basic_number = 19; //ここをいじると全一致しなくなる場合があるので注意
+int use_cutter_basic_number = 19; // ここをいじると全一致しなくなる場合があるので注意
 
 void print_board(vector<vector<int>> &grid)
 {
@@ -241,10 +241,9 @@ void main_algo()
 
             int tmp_x = 0;
             int tmp_y = 0;
-            int default_x = 0;
-            int default_y = 0;
-            int count=0;
-            int use_x; 
+            int before_dis = 1000;
+            int count = 0;
+            int use_x;
             int use_y;
 
             for (int y_sel = y; y_sel < board.size(); y_sel++)
@@ -260,29 +259,29 @@ void main_algo()
                     if (y_sel == y && x_sel <= x)
                         continue;
 
-                    //今のところ動かなくなるが、修正すればもしかしたら、、
-                    // if(goal_piece == board[y_sel][x_sel]){
-                    //     if(tmp_y + tmp_x == 0){
-                    //         tmp_x = x_sel;
-                    //         tmp_y = y_sel;
-                    //         default_x = x_sel;
-                    //         default_y = y_sel;
-                    //     }else if((abs(default_y - y_sel) <= 32 && count <= 100) && tmp_y + tmp_x > y_sel + x_sel){
-                    //         tmp_x = x_sel;
-                    //         tmp_y = y_sel;
-                    //     }else if((abs(default_y - y_sel) > 32 || count > 100)){
-                    //         x_sel = default_x;
-                    //         y_sel = default_y;
-                    //         use_x = tmp_x;
-                    //         use_y = tmp_y;
-                    //     }
+                    // 今のところ動かなくなるが、修正すればもしかしたら、、
+                    // 以下は幅優先にすることで無駄な計算を省ける
+                    for (int i = y_sel; i < board.size(); i++)
+                    {
+                        for (int j = 0; j < board[0].size(); j++)
+                        {
+                            if (i == y_sel && j <= x_sel)
+                                continue;
+                            if (goal_piece == board[i][j])
+                            {
+                                int now_dis = abs(i - y_sel) + abs(j - x_sel);
+                                if (now_dis < before_dis)
+                                {
+                                    before_dis = now_dis;
+                                    use_x = j;
+                                    use_y = i;
+                                }
+                            }
+                        }
+                    }
 
-                    //     count++;
-                        
-                    // }
-
-                    use_x = x_sel; use_y = y_sel;
-
+                    // use_x = x_sel;
+                    // use_y = y_sel;
 
                     // 寄せるピースが見つかったらそのピースを正しく移動させるための行動を選択
                     if (goal_piece == board[use_y][use_x])
@@ -304,22 +303,23 @@ void main_algo()
 
                             int move_length = x - use_x;
                             int times = 0;
-                            for(int i=1; i<128; i*=2){
-                                if(move_length >= 128 / i){
-                                    act[0] = use_cutter_basic_number - 3*times;
+                            for (int i = 1; i < 128; i *= 2)
+                            {
+                                if (move_length >= 128 / i)
+                                {
+                                    act[0] = use_cutter_basic_number - 3 * times;
                                     n++;
                                     ops.push_back(act);         // vector: opsに行動を記録
                                     board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
-                                    move_length -= 128 / i; //ここにcutterがboardからはみ出た時の処理が必要
+                                    move_length -= 128 / i;     // ここにcutterがboardからはみ出た時の処理が必要
 
-                                    if( (x + (128 / i)) >= board[0].size()){
+                                    if ((x + (128 / i)) >= board[0].size())
+                                    {
                                         move_length += (x + (128 / i)) - board[0].size();
                                     }
                                 }
                                 times++;
-
                             }
-                           
 
                             for (int _ = 0; _ < move_length; _++)
                             {
@@ -333,7 +333,8 @@ void main_algo()
 
                         int move_length2 = use_y - y;
 
-                        if(move_length2 > 0){
+                        if (move_length2 > 0)
+                        {
                             // cout << use_y << endl;
                             act[1] = x; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[2] = y; // 抜き型の起点となる座標（できれば負の数から適応も考える）
@@ -342,18 +343,20 @@ void main_algo()
                             if (x < use_x)
                                 act[1] = use_x;
 
-                            
                             int times = 0;
-                            for(int i=1; i<128; i*=2){
-                                
-                                if(move_length2 >= 128 / i){
-                                    act[0] = use_cutter_basic_number - 3*times;
+                            for (int i = 1; i < 128; i *= 2)
+                            {
+
+                                if (move_length2 >= 128 / i)
+                                {
+                                    act[0] = use_cutter_basic_number - 3 * times;
                                     n++;
                                     ops.push_back(act);         // vector: opsに行動を記録
                                     board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
                                     move_length2 -= 128 / i;
-                                    
-                                    if ((y + (128 / i)) >= board.size()){
+
+                                    if ((y + (128 / i)) >= board.size())
+                                    {
                                         move_length2 += (y + (128 / i)) - board.size();
                                     }
                                 }
@@ -368,28 +371,30 @@ void main_algo()
                                 // cout << "2act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
                                 // cout << use_x << " " << use_y << endl;
                             }
-
                         }
 
-                        
                         int move_length3 = use_x - x;
 
-                        if(move_length3 > 0){
+                        if (move_length3 > 0)
+                        {
                             act[1] = x; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[2] = y; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[3] = 2; // 移動方向：左
 
                             int times = 0;
-                            for(int i=1; i<128; i*=2){
-                                
-                                if(move_length3 >= 128 / i){
-                                    act[0] = use_cutter_basic_number - 3*times;
+                            for (int i = 1; i < 128; i *= 2)
+                            {
+
+                                if (move_length3 >= 128 / i)
+                                {
+                                    act[0] = use_cutter_basic_number - 3 * times;
                                     n++;
                                     ops.push_back(act);         // vector: opsに行動を記録
                                     board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
                                     move_length3 -= 128 / i;
-                                    
-                                    if ((x + (128 / i)) >= board[0].size()){
+
+                                    if ((x + (128 / i)) >= board[0].size())
+                                    {
                                         move_length3 += (x + (128 / i)) - board[0].size();
                                     }
                                 }
@@ -405,7 +410,6 @@ void main_algo()
                                 // cout << use_x << " " << use_y << endl;
                             }
                         }
-                        
 
                         // cout << endl;
                         // print_board(board);
@@ -506,8 +510,6 @@ int main()
     vector<string> get_board = recieve_json["board"]["start"];
 
     vector<string> get_goal = recieve_json["board"]["goal"];
-
-
 
     for (int i = 0; i < get_board.size(); i++)
     {
