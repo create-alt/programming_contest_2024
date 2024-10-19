@@ -11,6 +11,7 @@ using json = nlohmann::json;
 using namespace std;
 
 std::vector<std::vector<std::vector<int>>> cutter = {{{1}}};
+int use_cutter_basic_number = 19; //ここをいじると全一致しなくなる場合があるので注意
 
 void print_board(vector<vector<int>> &grid)
 {
@@ -237,6 +238,15 @@ void main_algo()
             // cout << board[y][x] << "x: " << x << " y: " << y << endl;
 
             //(x,y)に寄せるピースを探索
+
+            int tmp_x = 0;
+            int tmp_y = 0;
+            int default_x = 0;
+            int default_y = 0;
+            int count=0;
+            int use_x; 
+            int use_y;
+
             for (int y_sel = y; y_sel < board.size(); y_sel++)
             {
 
@@ -250,29 +260,53 @@ void main_algo()
                     if (y_sel == y && x_sel <= x)
                         continue;
 
+                    //今のところ動かなくなるが、修正すればもしかしたら、、
+                    // if(goal_piece == board[y_sel][x_sel]){
+                    //     if(tmp_y + tmp_x == 0){
+                    //         tmp_x = x_sel;
+                    //         tmp_y = y_sel;
+                    //         default_x = x_sel;
+                    //         default_y = y_sel;
+                    //     }else if((abs(default_y - y_sel) <= 32 && count <= 100) && tmp_y + tmp_x > y_sel + x_sel){
+                    //         tmp_x = x_sel;
+                    //         tmp_y = y_sel;
+                    //     }else if((abs(default_y - y_sel) > 32 || count > 100)){
+                    //         x_sel = default_x;
+                    //         y_sel = default_y;
+                    //         use_x = tmp_x;
+                    //         use_y = tmp_y;
+                    //     }
+
+                    //     count++;
+                        
+                    // }
+
+                    use_x = x_sel; use_y = y_sel;
+
+
                     // 寄せるピースが見つかったらそのピースを正しく移動させるための行動を選択
-                    if (goal_piece == board[y_sel][x_sel])
+                    if (goal_piece == board[use_y][use_x])
                     {
 
                         // int column_cut_size = 0;
 
                         act[0] = 0; // cutterの種類（ひとまず簡単のため[[1]]で考える）
 
-                        if (x_sel < x)
+                        if (use_x < x)
                         {
                             act[1] = x;
-                            act[2] = y_sel;
+                            act[2] = use_y;
                             act[3] = 3;
 
                             // cout << "1act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                            // cout << x_sel << " " << y_sel << endl;
-                            // cout << "raw_num is " << x - x_sel << endl;
+                            // cout << use_x << " " << use_y << endl;
+                            // cout << "raw_num is " << x - use_x << endl;
 
-                            int move_length = x - x_sel;
+                            int move_length = x - use_x;
                             int times = 0;
                             for(int i=1; i<128; i*=2){
                                 if(move_length >= 128 / i){
-                                    act[0] = 19 - 3*times;
+                                    act[0] = use_cutter_basic_number - 3*times;
                                     n++;
                                     ops.push_back(act);         // vector: opsに行動を記録
                                     board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
@@ -297,23 +331,23 @@ void main_algo()
                             }
                         }
 
-                        int move_length2 = y_sel - y;
+                        int move_length2 = use_y - y;
 
                         if(move_length2 > 0){
-                            // cout << y_sel << endl;
+                            // cout << use_y << endl;
                             act[1] = x; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[2] = y; // 抜き型の起点となる座標（できれば負の数から適応も考える）
                             act[3] = 0; // 移動方向：上
 
-                            if (x < x_sel)
-                                act[1] = x_sel;
+                            if (x < use_x)
+                                act[1] = use_x;
 
                             
                             int times = 0;
                             for(int i=1; i<128; i*=2){
                                 
                                 if(move_length2 >= 128 / i){
-                                    act[0] = 19 - 3*times;
+                                    act[0] = use_cutter_basic_number - 3*times;
                                     n++;
                                     ops.push_back(act);         // vector: opsに行動を記録
                                     board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
@@ -332,13 +366,13 @@ void main_algo()
                                 ops.push_back(act);         // vector: opsに行動を記録
                                 board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
                                 // cout << "2act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                                // cout << x_sel << " " << y_sel << endl;
+                                // cout << use_x << " " << use_y << endl;
                             }
 
                         }
 
                         
-                        int move_length3 = x_sel - x;
+                        int move_length3 = use_x - x;
 
                         if(move_length3 > 0){
                             act[1] = x; // 抜き型の起点となる座標（できれば負の数から適応も考える）
@@ -349,7 +383,7 @@ void main_algo()
                             for(int i=1; i<128; i*=2){
                                 
                                 if(move_length3 >= 128 / i){
-                                    act[0] = 19 - 3*times;
+                                    act[0] = use_cutter_basic_number - 3*times;
                                     n++;
                                     ops.push_back(act);         // vector: opsに行動を記録
                                     board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
@@ -368,7 +402,7 @@ void main_algo()
                                 board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
 
                                 // cout << "3act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                                // cout << x_sel << " " << y_sel << endl;
+                                // cout << use_x << " " << use_y << endl;
                             }
                         }
                         
