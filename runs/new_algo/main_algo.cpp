@@ -6,7 +6,7 @@
 #include <string>
 
 // https://github.com/nlohmann/json より引用
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 using json = nlohmann::json;
 using namespace std;
 
@@ -133,7 +133,6 @@ vector<vector<int>> action(vector<vector<int>> &board, vector<int> &act)
                 { // 右方向
                     for (int j = min(X + X_SIZE - 1, x_boardsize - 1); j >= 0; --j)
                     {
-                        // cout << "action move x: " << j << " y:" << i << " count:" << count << endl;
 
                         if (board[i][j] == -1)
                         {
@@ -145,18 +144,17 @@ vector<vector<int>> action(vector<vector<int>> &board, vector<int> &act)
                             board[i][j] = -1;
                         }
                     }
-                    // cout << "moved" << endl;
-                    // print_board(board);
                 }
             }
         }
     }
 
     // 元の位置にcut_valを戻す (全探索を避け、ピースが置かれた場所にのみ戻す)
+    // もともと左から縦方向にピースを抜き取っているので縦方向にもどしていく必要がある
     int cut_index = 0;
-    for (int i = 0; i < Y_SIZE; ++i)
+    for (int j = 0; j < X_SIZE; ++j)
     {
-        for (int j = 0; j < X_SIZE; ++j)
+        for (int i = 0; i < Y_SIZE; ++i)
         {
             if (cut_index < cut_val.size())
             {
@@ -169,12 +167,22 @@ vector<vector<int>> action(vector<vector<int>> &board, vector<int> &act)
                 }
                 else if (direction == 1)
                 {
-                    if (0 <= X + j && X + j < x_boardsize && 0 <= Y + i && Y + i < y_boardsize && board[Y + i][X + i] == -1)
+                    if (0 <= X + j && X + j < x_boardsize && 0 <= Y && Y < y_boardsize && board[Y][X + j] == -1)
                     {
-                        board[Y + i][X + j] = cut_val[cut_index++];
+                        board[Y][X + j] = cut_val[cut_index++];
                     }
                 }
-                else if (direction == 2)
+            }
+        }
+    }
+
+    for (int j = 0; j < X_SIZE; ++j)
+    {
+        for (int i = 0; i < Y_SIZE; ++i)
+        {
+            if (cut_index < cut_val.size())
+            {
+                if (direction == 2)
                 {
                     if (0 <= x_boardsize - X_SIZE + j && x_boardsize - X_SIZE + j < x_boardsize && 0 <= Y + i && Y + i < y_boardsize && board[Y + i][x_boardsize - X_SIZE + j] == -1)
                     {
@@ -183,8 +191,7 @@ vector<vector<int>> action(vector<vector<int>> &board, vector<int> &act)
                 }
                 else if (direction == 3)
                 {
-                    // cout << "action Y: " << Y + i << "X: " << X + j << endl;
-                    if (0 <= j && j < x_boardsize && 0 <= Y + i && Y + i < y_boardsize && board[Y + i][j] == -1)
+                    if (0 <= X + j && X + j < x_boardsize && 0 <= Y + i && Y + i < y_boardsize && board[Y + i][j] == -1)
                     {
                         board[Y + i][j] = cut_val[cut_index++];
                     }
@@ -208,11 +215,8 @@ vector<vector<int>> ops;
 
 void main_algo()
 {
-    vector<vector<bool>> check(board.size(), vector<bool>(board[0].size(), true));
-
     vector<int> act(4);
 
-    bool chain_eq = true;
     int pos_x, pos_y, cutter, direct;
 
     for (int y = 0; y < board.size(); y++)
@@ -222,18 +226,15 @@ void main_algo()
         for (int x = 0; x < board[0].size(); x++)
         {
 
-            if (board[y][x] == goal[y][x] and chain_eq)
+            if (board[y][x] == goal[y][x])
             {
-                check[y][x] = false;
                 // 左上から確認していき、連続している間はpass
-                break;
+                continue;
             }
 
-            // 違う箇所が現れたらそれ以降のpieceから同じ値を探索
-            chain_eq = false;
-
             int goal_piece = goal[y][x];
-            // cout << board[y][x] << "x: " << x << " y: " << y << endl;
+            cout << "goal : " << goal_piece;
+            cout << board[y][x] << "x: " << x << " y: " << y << endl;
 
             //(x,y)に寄せるピースを探索
             for (int y_sel = y; y_sel < board.size(); y_sel++)
@@ -263,12 +264,13 @@ void main_algo()
                             act[2] = y_sel;
                             act[3] = 3;
 
-                            // cout << "1act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                            // cout << x_sel << " " << y_sel << endl;
-                            // cout << "raw_num is " << x - x_sel << endl;
+                            cout << "1act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
+                            cout << x_sel << " " << y_sel << endl;
+                            cout << "raw_num is " << x - x_sel << endl;
 
                             for (int _ = 0; _ < x - x_sel; _++)
                             {
+                                n++;
                                 ops.push_back(act);         // vector: opsに行動を記録
                                 board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
                             }
@@ -287,8 +289,8 @@ void main_algo()
 
                             ops.push_back(act);         // vector: opsに行動を記録
                             board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
-                            // cout << "2act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                            // cout << x_sel << " " << y_sel << endl;
+                            cout << "2act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
+                            cout << x_sel << " " << y_sel << endl;
                         }
 
                         for (int _ = 0; _ < x_sel - x; _++)
@@ -301,14 +303,12 @@ void main_algo()
                             ops.push_back(act);         // vector: opsに行動を記録
                             board = action(board, act); // 選択した行動を行いboardを更新（boardは参照渡し）
 
-                            // cout << "3act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
-                            // cout << x_sel << " " << y_sel << endl;
+                            cout << "3act is " << act[0] << " " << act[1] << " " << act[2] << " " << act[3] << endl;
+                            cout << x_sel << " " << y_sel << endl;
                         }
 
-                        // cout << endl;
-                        // print_board(board);
-
-                        check[y_sel][x_sel] = false;
+                        cout << endl;
+                        print_board(board);
 
                         quit = true;
                         break;
@@ -386,15 +386,26 @@ int main()
     //     cutter.push_back(grid);
     // }
 
-    vector<string> get_board = {"220103231",
-                                "213033021",
-                                "022103002",
-                                "322033133"};
+    // https://qiita.com/YukkuriAzuki/items/b856811b9a5b012d4907 参照
+    json recieve_json;
 
-    vector<string> get_goal = {"000000000",
-                               "111111222",
-                               "222222233",
-                               "333333333"};
+    string filename = "response.json";
+
+    // ファイルを読み込んで内容を画面に表示する
+    // 読み込みに失敗した場合はエラーを表示する
+    ifstream ifs(filename.c_str());
+    if (ifs.good())
+    {
+        ifs >> recieve_json;
+    }
+    else
+    {
+        cout << "ファイルの読み込みに失敗しました" << endl;
+    }
+
+    vector<string> get_board = recieve_json["board"]["start"];
+
+    vector<string> get_goal = recieve_json["board"]["goal"];
 
     for (int i = 0; i < get_board.size(); i++)
     {
@@ -467,9 +478,9 @@ int main()
     {
         json json_object = {
             {"p", ops[i][0]},
-            {"x", ops[i][0]},
-            {"y", ops[i][0]},
-            {"s", ops[i][0]}};
+            {"x", ops[i][1]},
+            {"y", ops[i][2]},
+            {"s", ops[i][3]}};
 
         save_file["ops"].push_back(json_object);
     }
@@ -478,12 +489,12 @@ int main()
     ofstream file("solution.json");
     if (file.is_open())
     {
-        file << save_file.dump(4); // インデント幅 4 で整形
+        file << save_file.dump(4); // インデント幅4で成形
         file.close();
-        cout << "JSONファイルが作成されました。" << endl;
+        cout << "done creating json file" << endl;
     }
     else
     {
-        cerr << "ファイルを開けませんでした。" << endl;
+        cerr << "cannot open the file" << endl;
     }
 }
