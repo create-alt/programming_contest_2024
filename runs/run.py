@@ -16,13 +16,12 @@ from create_board import create_train_board
 
 SEED = 100
 random.seed(SEED)
-# host_name = "http://localhost:8080"
-host_name = "http://172.29.1.2:80"
+host_name = "http://localhost:8080"
 
 # 本番前にはここを実行可能にして下の自作部分を隠す
 # ヘッダーの設定
 headers = {
-    "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"
+    "Procon-Token": "token1"
 }
 
 # GET リクエストを送信

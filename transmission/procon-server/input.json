@@ -1,6 +1,8 @@
 {
     "teams": [
-        "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"
+        "token1",
+        "token2",
+        "token3"
     ],
     "duration": 300,
     "problem": {

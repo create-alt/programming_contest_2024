@@ -3,9 +3,8 @@ import subprocess
 import json
 
 host_name = "http://localhost:8080"
-# host_name = "http://172.29.1.2:80"
 
-token = "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"
+token = "token1"
 
 # ヘッダーの設定
 headers = {

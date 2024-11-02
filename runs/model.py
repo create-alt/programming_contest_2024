@@ -24,8 +24,7 @@ from func import *
 
 
 path = "../model_weights/"
-# host_name = "http://localhost:8080"
-host_name = "http://172.29.1.2:80"
+host_name = "http://localhost:8080"
 
 
 """## 学習用class定義"""
