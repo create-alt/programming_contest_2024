@@ -161,7 +161,7 @@ class Trainer:
 
           # ヘッダーの設定
           headers = {"Content-Type": "application/json",
-                     "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+                     "Procon-Token": "token1"}
 
           # POST リクエストを送信
           response = requests.post(
@@ -944,7 +944,7 @@ class SAC(Algorithm):
 
           # ヘッダーの設定
           headers = {"Content-Type": "application/json",
-                     "Procon-Token": "osaka534508e81dbe6f70f9b2e07e61464780bd75646fdabf7b1e7d828d490e3"}
+                     "Procon-Token": "token1"}
 
           # POST リクエストを送信
           response = requests.post(
