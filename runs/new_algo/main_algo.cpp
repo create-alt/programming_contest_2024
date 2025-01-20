@@ -10,7 +10,7 @@
 using json = nlohmann::json;
 using namespace std;
 
-std::vector<std::vector<std::vector<int>>> cutter = {{{1}}};
+vector<vector<std::vector<int>>> cutter = {{{1}}};
 int use_cutter_basic_number = 19; // ここをいじると全一致しなくなるので注意
 
 void print_board(vector<vector<int>> &grid)
@@ -427,18 +427,18 @@ void main_algo()
 int main()
 {
     // サイズリスト
-    std::vector<int> sizes = {2, 4, 8, 16, 32, 64, 128, 256};
+    vector<int> sizes = {2, 4, 8, 16, 32, 64, 128, 256};
 
     // サイズごとの定型抜き型を作成
     for (int size : sizes)
     {
-        std::vector<std::vector<int>> grid;
+        vector<vector<int>> grid;
 
         // すべてが1の抜き型
         grid.clear();
         for (int i = 0; i < size; ++i)
         {
-            std::vector<int> row(size, 1);
+            vector<int> row(size, 1);
             grid.push_back(row);
         }
         cutter.push_back(grid);
@@ -447,7 +447,7 @@ int main()
         grid.clear();
         for (int i = 0; i < size; ++i)
         {
-            std::vector<int> row;
+            vector<int> row;
             for (int j = 0; j < size; ++j)
             {
                 row.push_back((i % 2 == 0) ? 1 : 0);
