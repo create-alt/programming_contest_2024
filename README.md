@@ -5,9 +5,12 @@
 下記のpythonによるAI実装はあまりにも精度が振るわなかったので没にしました。
 その代わりにnew_algoにc++メインの全探索系アルゴリズムを置いています。
 
+/// new_algo ///
 実行前にrequirements.txtを使用して仮想環境内にpythonライブラリをインストールしてください。
 
-///以下はold_algo使用時の注意点です///
+main.pyを実行すると結果が出力されるようになっていますが、main.py内にはサーバー通信用コードが入っているので別大会でも参考にしてもらえると幸いです。
+
+/// old_algo ///
 
 pytorchに関してはCUDAのバージョンでインストール方法が異なるので　[pytoch公式サイト](https://pytorch.org/get-started/locally/)　を参照してください。
 
